@@ -1,0 +1,6 @@
+{
+  "name": "Argon Mars Civilization Blueprint & Multi-Agent Kernel",
+  "description": "Unified 50-year Mars civilization architecture: deterministic multi-agent kernel, planetary simulation, emotional digital twins, and cinematic universe.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
