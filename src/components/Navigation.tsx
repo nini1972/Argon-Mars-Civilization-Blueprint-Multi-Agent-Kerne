@@ -8,8 +8,8 @@ import { AutonomyLevel } from '../types/blueprint';
 import { Play, Pause, StepForward, Download, Terminal } from 'lucide-react';
 
 interface NavigationProps {
-  activeTab: 'overview' | 'kernel' | 'planetary' | 'emotional' | 'cinematic';
-  setActiveTab: (tab: 'overview' | 'kernel' | 'planetary' | 'emotional' | 'cinematic') => void;
+  activeTab: 'overview' | 'atlas' | 'kernel' | 'planetary' | 'emotional' | 'cinematic';
+  setActiveTab: (tab: 'overview' | 'atlas' | 'kernel' | 'planetary' | 'emotional' | 'cinematic') => void;
   autonomyLevel: AutonomyLevel;
   setAutonomyLevel: (lvl: AutonomyLevel) => void;
   isRunning: boolean;
@@ -47,7 +47,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <span>Argon · Mars Civilization Blueprint</span>
         </button>
 
-        {/* Zone 2: 5 clean single-line text navigation links */}
+        {/* Zone 2: Clean single-line text navigation links */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-400">
           <button
             onClick={() => setActiveTab('overview')}
@@ -58,6 +58,16 @@ export const Navigation: React.FC<NavigationProps> = ({
             }`}
           >
             Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('atlas')}
+            className={`whitespace-nowrap shrink-0 transition-colors pb-0.5 ${
+              activeTab === 'atlas'
+                ? 'text-white border-b-2 border-amber-500'
+                : 'hover:text-slate-200'
+            }`}
+          >
+            Atlas (Plates I–VII)
           </button>
           <button
             onClick={() => setActiveTab('kernel')}

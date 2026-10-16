@@ -20,7 +20,7 @@ import {
 
 interface BlueprintExplorerProps {
   onSelectSection: (section: BlueprintSection) => void;
-  onNavigateTab: (tab: 'overview' | 'kernel' | 'planetary' | 'emotional' | 'cinematic') => void;
+  onNavigateTab: (tab: 'overview' | 'atlas' | 'kernel' | 'planetary' | 'emotional' | 'cinematic') => void;
 }
 
 export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
@@ -48,7 +48,21 @@ export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
         </div>
 
         {/* Quick Access Pillar Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-4">
+          <button
+            onClick={() => onNavigateTab('atlas')}
+            className="p-4 bg-slate-950/70 hover:bg-slate-900 rounded-xl border border-slate-800 hover:border-amber-500/80 text-left transition-all group"
+          >
+            <div className="text-amber-500 text-xs font-mono mb-1">FOLIO</div>
+            <div className="text-sm font-bold text-slate-100 group-hover:text-amber-400 flex items-center justify-between">
+              <span>Atlas (Plates I–VII)</span>
+              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:translate-x-1 transition-transform" />
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5">
+              Vectorized areographic maps, deep stratigraphy, and habitat deck floorplans.
+            </p>
+          </button>
+
           <button
             onClick={() => onNavigateTab('kernel')}
             className="p-4 bg-slate-950/70 hover:bg-slate-900 rounded-xl border border-slate-800 hover:border-amber-500/60 text-left transition-all group"
@@ -83,7 +97,7 @@ export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
           >
             <div className="text-purple-400 text-xs font-mono mb-1">MODULE 3</div>
             <div className="text-sm font-bold text-slate-100 group-hover:text-purple-300 flex items-center justify-between">
-              <span>Emotional Digital Twins</span>
+              <span>Emotional Twins</span>
               <ChevronRight className="w-4 h-4 text-slate-500 group-hover:translate-x-1 transition-transform" />
             </div>
             <p className="text-xs text-slate-400 mt-1.5">

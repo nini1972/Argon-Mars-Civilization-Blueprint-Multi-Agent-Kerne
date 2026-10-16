@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigation } from './components/Navigation';
 import { BlueprintExplorer } from './components/BlueprintExplorer';
+import { AtlasTab } from './components/AtlasTab';
 import { KernelConsole } from './components/KernelConsole';
 import { PlanetarySimulationLab } from './components/PlanetarySimulationLab';
 import { EmotionalTwinsLab } from './components/EmotionalTwinsLab';
@@ -14,7 +15,7 @@ import { ExportModal } from './components/ExportModal';
 import { AutonomyLevel, BlueprintSection } from './types/blueprint';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'kernel' | 'planetary' | 'emotional' | 'cinematic'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'atlas' | 'kernel' | 'planetary' | 'emotional' | 'cinematic'>('overview');
   const [autonomyLevel, setAutonomyLevel] = useState<AutonomyLevel>('AL2_NOMINAL_AUTONOMOUS');
   const [isRunning, setIsRunning] = useState<boolean>(true);
   const [isExportOpen, setIsExportOpen] = useState<boolean>(false);
@@ -103,6 +104,8 @@ export default function App() {
             onNavigateTab={setActiveTab}
           />
         )}
+
+        {activeTab === 'atlas' && <AtlasTab />}
 
         {activeTab === 'kernel' && (
           <KernelConsole

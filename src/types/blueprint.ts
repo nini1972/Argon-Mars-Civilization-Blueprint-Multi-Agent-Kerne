@@ -118,3 +118,17 @@ export interface BlueprintSection {
   crossRefs: string[];
   agentOwnership: AgentId[];
 }
+
+export interface AtlasPlate {
+  id: string; // e.g. 'Plate I'
+  number: string; // 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'
+  title: string;
+  subtitle: string;
+  moduleRef: string;
+  scale: string;
+  datum: string;
+  summary: string;
+  keyAxioms: string[];
+}
+
+
