@@ -12,7 +12,7 @@ import {
   HomeostaticTensor,
   SettlementId,
 } from '../types/blueprint';
-import { D3MarsMap, SettlementSite } from './D3MarsMap';
+import { D3MarsMap, SETTLEMENT_SITES, SettlementSite } from './D3MarsMap';
 import {
   Map,
   Layers,
@@ -83,20 +83,69 @@ export const AtlasTab: React.FC<AtlasTabProps> = ({
   const [showAirflowGrid, setShowAirflowGrid] = useState<boolean>(true);
   const [showSafetyHalo, setShowSafetyHalo] = useState<boolean>(true);
 
-  // Sync Atlas Layer Toggles to Active Civilization Lens
+  // Deterministically Sync Atlas Layer Toggles & Plate Selection to Active Civilization Lens (DEF-07)
   useEffect(() => {
-    if (activeLens === 'GEOGRAPHY') {
+    if (activeLens === 'ALL') {
+      setShowMaglevLine(true);
+      setShowStormTracks(true);
       setShowMagneticAnomalies(true);
       setShowStressVectors(true);
+      setShowRadiationShields(true);
+      setShowAirflowGrid(true);
+      setShowSafetyHalo(true);
+    } else if (activeLens === 'GEOGRAPHY') {
+      setShowMaglevLine(false);
+      setShowStormTracks(true);
+      setShowMagneticAnomalies(true);
+      setShowStressVectors(true);
+      setShowRadiationShields(false);
+      setShowAirflowGrid(false);
+      setShowSafetyHalo(false);
     } else if (activeLens === 'INFRASTRUCTURE') {
       setShowMaglevLine(true);
+      setShowStormTracks(false);
+      setShowMagneticAnomalies(false);
+      setShowStressVectors(true);
+      setShowRadiationShields(false);
       setShowAirflowGrid(true);
-    } else if (activeLens === 'RESILIENCE') {
-      setShowStormTracks(true);
+      setShowSafetyHalo(false);
+    } else if (activeLens === 'PSYCHOLOGY') {
+      setShowMaglevLine(false);
+      setShowStormTracks(false);
+      setShowMagneticAnomalies(false);
+      setShowStressVectors(false);
       setShowRadiationShields(true);
+      setShowAirflowGrid(true);
+      setShowSafetyHalo(true);
+    } else if (activeLens === 'CULTURE') {
+      setShowMaglevLine(true);
+      setShowStormTracks(false);
+      setShowMagneticAnomalies(false);
+      setShowStressVectors(false);
+      setShowRadiationShields(false);
+      setShowAirflowGrid(true);
+      setShowSafetyHalo(false);
+    } else if (activeLens === 'NARRATIVE') {
+      setShowMaglevLine(true);
+      setShowStormTracks(true);
+      setShowMagneticAnomalies(false);
+      setShowStressVectors(false);
+      setShowRadiationShields(false);
+      setShowAirflowGrid(false);
+      setShowSafetyHalo(false);
+    } else if (activeLens === 'RESILIENCE') {
+      setShowMaglevLine(false);
+      setShowStormTracks(true);
+      setShowMagneticAnomalies(true);
+      setShowStressVectors(true);
+      setShowRadiationShields(true);
+      setShowAirflowGrid(false);
       setShowSafetyHalo(true);
     }
   }, [activeLens]);
+
+  const currentSettlement =
+    SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0];
 
   const handleSelectSettlementSite = (site: SettlementSite) => {
     if (setActiveSettlementId) {
@@ -133,7 +182,9 @@ export const AtlasTab: React.FC<AtlasTabProps> = ({
             <span>·</span>
             <span>PLATES I – VII</span>
             <span>·</span>
-            <span>VECTOR SCHEMATICS</span>
+            <span>FOCUS: {currentSettlement.code} ({currentSettlement.name.toUpperCase()})</span>
+            <span>·</span>
+            <span>LENS: {activeLens}</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
             Areographic Atlas &amp; Architectural Folio
@@ -322,6 +373,7 @@ export const AtlasTab: React.FC<AtlasTabProps> = ({
         {selectedPlateId === 'plate-1' && plate1Mode === 'd3-interactive' ? (
           <div className="p-6 bg-[#030508]">
             <D3MarsMap
+              activeSettlementId={activeSettlementId}
               onSelectSite={handleSelectSettlementSite}
               onOpenIntegratedTwin={handleOpenTwin}
               showMaglev={showMaglevLine}

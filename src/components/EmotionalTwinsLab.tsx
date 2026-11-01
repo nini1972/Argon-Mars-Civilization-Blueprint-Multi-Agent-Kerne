@@ -15,6 +15,7 @@ import {
 } from '../types/blueprint';
 import { SETTLEMENT_SITES } from './D3MarsMap';
 import { CANON_FILMS } from '../data/blueprintData';
+import { SETTLEMENT_TENSOR_BASELINES } from '../utils/physicsEngine';
 import {
   ShieldCheck,
   Lock,
@@ -86,20 +87,17 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
   const currentSettlement =
     SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0];
 
-  // Zero-Knowledge PSE Simulation State
-  const [zkStatus] = useState<{
-    sramWipeCountdown: number;
-    cohortSize: number;
-    privacyEpsilon: number;
-    zkProofVerified: boolean;
-    nullifierHash: string;
-  }>({
+  const isSanctuaryBlackout = sanctuaryMode === 'SANCTUARY_BLACKOUT';
+
+  // Settlement-synchronized Zero-Knowledge PSE State (DEF-05)
+  const dynamicCohortSize = Math.max(28, Math.round(currentSettlement.population / 52));
+  const zkStatus = {
     sramWipeCountdown: 42,
-    cohortSize: 28,
-    privacyEpsilon: 0.08,
+    cohortSize: dynamicCohortSize,
+    privacyEpsilon: sanctuaryMode === 'DIFFERENTIAL_ONLY' ? 0.04 : 0.08,
     zkProofVerified: true,
-    nullifierHash: '0x9f8c...4b12',
-  });
+    nullifierHash: `0x${currentSettlement.code.toLowerCase().replace('-', '')}...4b12`,
+  };
 
   // FACS Action Units computed from Homeostatic Tensor
   const actionUnits: FACSActionUnit[] = [
@@ -182,14 +180,11 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
           vestibularStrain: 0.25,
         });
         break;
-      case 'nominal':
-        setHumanTensor({
-          circadianDesync: 0.15,
-          allostaticLoad: 0.35,
-          cognitiveFatigue: 0.28,
-          proxemicCrowding: 0.20,
-          vestibularStrain: 0.08,
-        });
+      case 'nominal': {
+        const base =
+          SETTLEMENT_TENSOR_BASELINES[activeSettlementId] ||
+          SETTLEMENT_TENSOR_BASELINES['arcadia-prime'];
+        setHumanTensor({ ...base });
         setSyntheticDaemon({
           daemonName: 'tka_kernel_d (RAD750 TMR)',
           entropyDivergence: 0.04,
@@ -198,10 +193,11 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
           syntheticEmpathyIndex: 0.92,
         });
         break;
+      }
     }
   };
 
-  const isAllostaticPreemption = humanTensor.allostaticLoad >= 0.72;
+  const isAllostaticPreemption = !isSanctuaryBlackout && humanTensor.allostaticLoad >= 0.72;
 
   // Cultural Catharsis Recommendation based on dominant stressor
   const recommendedCanonFilm =
@@ -321,14 +317,30 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
           <div className="p-2.5 bg-slate-950 rounded border border-slate-800 space-y-1">
             <div className="flex justify-between text-[11px]">
               <span className="text-slate-400">Kernel AGT-EMA Preemption:</span>
-              <span className={isAllostaticPreemption ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                {isAllostaticPreemption ? 'ACTIVE (w_EMA = 47%)' : 'STANDBY (w_EMA = 35%)'}
+              <span
+                className={
+                  isSanctuaryBlackout
+                    ? 'text-emerald-400 font-bold'
+                    : isAllostaticPreemption
+                    ? 'text-rose-400 font-bold'
+                    : 'text-emerald-400 font-bold'
+                }
+              >
+                {isSanctuaryBlackout
+                  ? 'REDACTED [SANCTUARY]'
+                  : isAllostaticPreemption
+                  ? 'ACTIVE (w_EMA = 46–47%)'
+                  : 'STANDBY (w_EMA = 35%)'}
               </span>
             </div>
             <div className="flex justify-between text-[11px]">
               <span className="text-slate-400">Sky-Dome Spectrum:</span>
               <span className="text-cyan-300">
-                {humanTensor.circadianDesync > 0.5 ? '6500K Melanopic Entrainment' : '4200K Nominal Sol'}
+                {isSanctuaryBlackout
+                  ? 'REDACTED [SANCTUARY]'
+                  : humanTensor.circadianDesync > 0.5
+                  ? '6500K Melanopic Entrainment'
+                  : '4200K Nominal Sol'}
               </span>
             </div>
           </div>
@@ -490,11 +502,43 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
                 Subterranean lava tube volumetric confinement vs. acoustic dampening threshold
               </div>
             </div>
+
+            {/* Slider 5: nu_vestib */}
+            <div>
+              <div className="flex justify-between text-xs font-mono mb-1">
+                <span className="text-slate-400">ν_vestib (Vestibular 0.376g Strain):</span>
+                <span className="text-cyan-300 font-bold tabular-nums">
+                  {sanctuaryMode === 'SANCTUARY_BLACKOUT'
+                    ? 'SANCTUARY OPACITY'
+                    : `${(humanTensor.vestibularStrain * 100).toFixed(0)}%`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.02"
+                value={humanTensor.vestibularStrain}
+                onChange={(e) =>
+                  setHumanTensor((prev) => ({ ...prev, vestibularStrain: parseFloat(e.target.value) }))
+                }
+                className="w-full accent-cyan-500"
+              />
+              <div className="text-[10px] text-slate-500 font-mono">
+                Otolith &amp; proprioceptive adaptation to Martian hypogravity (3.721 m/s²)
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Card 2: Synthetic Agent Daemon State Machine */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-5">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-5 transition-all ${
+            activeLens === 'INFRASTRUCTURE' || activeLens === 'RESILIENCE'
+              ? 'border-cyan-500/80 ring-1 ring-cyan-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               <Cpu className="w-4 h-4 text-cyan-400" />
@@ -554,7 +598,13 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
       {/* Bottom Grid: FACS Facial Action Coding & Zero-Knowledge Enclave */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* FACS Action Units Table */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-4">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-4 transition-all ${
+            activeLens === 'PSYCHOLOGY' || activeLens === 'CULTURE' || activeLens === 'NARRATIVE'
+              ? 'border-purple-500/70 ring-1 ring-purple-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               <Eye className="w-4 h-4 text-purple-400" />
@@ -576,15 +626,20 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
                   </div>
                 </div>
 
-                <div className="w-24 text-right">
+                <div className="w-32 text-right">
                   <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-purple-500 transition-all duration-300"
-                      style={{ width: `${au.intensity * 100}%` }}
+                      style={{
+                        width: isSanctuaryBlackout ? '100%' : `${au.intensity * 100}%`,
+                        opacity: isSanctuaryBlackout ? 0.15 : 1,
+                      }}
                     />
                   </div>
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    {(au.intensity * 100).toFixed(0)}% Tension
+                    {isSanctuaryBlackout
+                      ? 'REDACTED [SANCTUARY]'
+                      : `${(au.intensity * 100).toFixed(0)}% Tension`}
                   </span>
                 </div>
               </div>
@@ -593,7 +648,13 @@ export const EmotionalTwinsLab: React.FC<EmotionalTwinsLabProps> = ({
         </div>
 
         {/* Zero-Knowledge Personal Somatic Enclave (PSE) */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-4">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-4 transition-all ${
+            activeLens === 'CULTURE' || activeLens === 'RESILIENCE' || activeLens === 'GEOGRAPHY'
+              ? 'border-emerald-500/70 ring-1 ring-emerald-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               <Lock className="w-4 h-4 text-emerald-400" />

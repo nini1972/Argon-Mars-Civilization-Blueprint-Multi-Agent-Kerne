@@ -9,9 +9,14 @@ import {
   CivilizationLens,
   DashboardTab,
   HomeostaticTensor,
+  SanctuaryMode,
   SettlementId,
 } from '../types/blueprint';
 import { SETTLEMENT_SITES } from './D3MarsMap';
+import {
+  computePlanetaryPhysics,
+  computeKernelVcgAuction,
+} from '../utils/physicsEngine';
 import {
   ShieldAlert,
   Cpu,
@@ -51,6 +56,9 @@ interface KernelConsoleProps {
   setReactorCoreTempK: (t: number) => void;
   chpShuntKw?: number;
   pipeFlowRateLpm?: number;
+  shieldingType?: 'dry_basalt' | 'graded_z';
+  arealDepthGcm2?: number;
+  sanctuaryMode?: SanctuaryMode;
   humanTensor?: HomeostaticTensor;
   setHumanTensor?: React.Dispatch<React.SetStateAction<HomeostaticTensor>>;
   onNavigateTab?: (tab: DashboardTab) => void;
@@ -79,6 +87,9 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
   setReactorCoreTempK,
   chpShuntKw = 320,
   pipeFlowRateLpm = 18,
+  shieldingType = 'graded_z',
+  arealDepthGcm2 = 180,
+  sanctuaryMode = 'ACTIVE_COHORT_SYNC',
   humanTensor,
   setHumanTensor,
   onNavigateTab,
@@ -97,99 +108,74 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
   const currentSettlement =
     SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0];
 
-  // Coupled Planetary Physics -> Kernel Power Supply
-  const cosZenith = Math.max(0.01, Math.cos((solarZenithDeg * Math.PI) / 180));
-  const toaFlux = 589.2;
-  const directFlux = toaFlux * cosZenith * Math.exp(-opticalDepthTau / cosZenith);
-  const diffuseRatio = 0.58 * (1 - Math.exp(-0.65 * opticalDepthTau));
-  const diffuseFlux = (toaFlux * cosZenith - directFlux) * diffuseRatio;
-  const totalSurfaceFlux = Math.max(0, directFlux + diffuseFlux);
-  const pvYieldWattsPerM2 = totalSurfaceFlux * 0.28;
-  const pvArrayOutputKw = Math.round(pvYieldWattsPerM2 * 3.2);
-  const fissionBaseKw = reactorCoreTempK > 1100 ? 320 : 580;
+  const defaultTensor: HomeostaticTensor = {
+    circadianDesync: 0.18,
+    allostaticLoad: 0.35,
+    cognitiveFatigue: 0.28,
+    proxemicCrowding: 0.22,
+    vestibularStrain: 0.08,
+  };
+  const activeTensor = humanTensor || defaultTensor;
 
-  // Coupled Emotional Twin Telemetry -> Kernel Constraint Injection
-  const allostaticLoad = humanTensor ? humanTensor.allostaticLoad : 0.35;
-  const cognitiveFatigue = humanTensor ? humanTensor.cognitiveFatigue : 0.28;
-  const isAllostaticPreemption = allostaticLoad >= 0.72;
-  const isCognitiveThrottle = cognitiveFatigue >= 0.65;
+  // Shared Planetary Physics Engine -> Kernel Power, Cryo & Shielding (DEF-02, DEF-06)
+  const physics = computePlanetaryPhysics({
+    opticalDepthTau,
+    solarZenithDeg,
+    reactorCoreTempK,
+    chpShuntKw,
+    pipeFlowRateLpm,
+    shieldingType,
+    arealDepthGcm2,
+    speProtonFlux,
+    settlementPopulation: currentSettlement.population,
+  });
 
-  // Compute Epistemic Weights based on active hazards & Emotional Twin Preemption
-  const isSpeEmergency = speProtonFlux >= 10;
-  const isDustStorm = opticalDepthTau >= 3.5;
+  const {
+    pvArrayOutputKw,
+    fissionBaseKw,
+    totalPowerSupplyKw: totalPowerSupply,
+    contestablePowerKw: contestablePower,
+    isPipeFreezing,
+    effectiveDoseMsvYear,
+    isRadiationHazard,
+    seuBitFlipRatePerMsol,
+  } = physics;
 
-  let wTka = 0.35;
-  let wPss = 0.20;
-  let wEma = 0.35;
-  let wCud = 0.10;
+  // Harmonized VCG Multi-Commodity Auction & Sanctuary Air-Gap (DEF-03, DEF-04, DEF-06)
+  const vcg = computeKernelVcgAuction({
+    opticalDepthTau,
+    speProtonFlux,
+    chpShuntKw,
+    pipeFlowRateLpm,
+    effectiveDoseMsvYear,
+    contestablePowerKw: contestablePower,
+    humanTensor: activeTensor,
+    sanctuaryMode,
+  });
 
-  if (isSpeEmergency) {
-    wTka = 0.52;
-    wPss = 0.28;
-    wEma = isAllostaticPreemption ? 0.20 : 0.15;
-    wCud = 0.00;
-  } else if (isDustStorm) {
-    wTka = 0.45;
-    wPss = 0.30;
-    wEma = isAllostaticPreemption ? 0.25 : 0.18;
-    wCud = 0.00;
-  } else if (isAllostaticPreemption) {
-    // Emotional Twin Preemption Active!
-    wTka = 0.25;
-    wPss = 0.18;
-    wEma = 0.47;
-    wCud = 0.10;
-  }
+  const {
+    wTka,
+    wPss,
+    wEma,
+    wCud,
+    weightSum,
+    isSpeEmergency,
+    isDustStorm,
+    isAllostaticPreemption,
+    isCognitiveThrottle,
+    isCircadianBoost,
+    isSanctuaryRedacted,
+    bids,
+  } = vcg;
 
-  const weightSum = wTka + wPss + wEma + wCud;
-
-  // VCG Bidding state
-  const totalPowerSupply = fissionBaseKw + pvArrayOutputKw; // Coupled to Planetary Lab!
-  const ethPowerFloor = 350; // CONST-ETH floor
-  const contestablePower = Math.max(0, totalPowerSupply - ethPowerFloor);
-
-  const bids = [
-    {
-      agent: 'AGT-TKA',
-      task: 'Electrolysis & Sabatier Sintering',
-      blueprintClause: 'REF:[ISRU-Industrial]',
-      minKW: 180,
-      optKW: 400,
-      allocatedKW: Math.round(contestablePower * (wTka / weightSum)),
-    },
-    {
-      agent: 'AGT-PSS',
-      task: `Rodwell Cryo-Melt (${chpShuntKw} kW_th Shunt)`,
-      blueprintClause: 'REF:[Cryosphere-Hydrology]',
-      minKW: 60,
-      optKW: 160,
-      allocatedKW: Math.round(contestablePower * (wPss / weightSum)),
-    },
-    {
-      agent: 'AGT-EMA',
-      task: isAllostaticPreemption
-        ? 'PREEMPTION: 6500K Phototherapy & Biophilia Surge'
-        : 'Circadian Phototherapy & Biophilia',
-      blueprintClause: 'CONST-ETH Art. III',
-      minKW: 40,
-      optKW: 120,
-      allocatedKW: Math.round(contestablePower * (wEma / weightSum)),
-    },
-    {
-      agent: 'AGT-CUD',
-      task: 'Diegetic Atmospheric Projections',
-      blueprintClause: 'REF:[Visual-Semiotics]',
-      minKW: 0,
-      optKW: 45,
-      allocatedKW: Math.round(contestablePower * (wCud / weightSum)),
-    },
-  ];
+  const allostaticLoad = activeTensor.allostaticLoad;
 
   // Control Barrier Functions (CBF)
   const isO2Safe = o2PartialPressurePa >= 16000 && o2PartialPressurePa <= 23500;
   const isCo2Safe = co2PartialPressurePa <= 500;
   const isReactorSafe = reactorCoreTempK <= 1100;
   const isHullSafe = hullPressurePa >= 68000;
+  const isCryoPipeSafe = !isPipeFreezing;
 
   // Handle SEU bit-flip injection
   const injectSeu = () => {
@@ -247,7 +233,7 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
       </div>
 
       {/* Control Barrier Function (CBF) Hard Safety Telemetry strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* O2 Barrier */}
         <div className="p-4 bg-slate-900/80 rounded-lg border border-slate-800 flex flex-col justify-between">
           <div className="flex items-center justify-between">
@@ -349,6 +335,34 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
             Safety Trip: 1,100 K (B4C Drum Auto-Scram)
           </div>
         </div>
+
+        {/* Cryo-Pipe & Shielding CBF Barrier (DEF-06) */}
+        <div className="p-4 bg-slate-900/80 rounded-lg border border-slate-800 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-mono uppercase text-slate-400">Cryo-Pipe &amp; Rad</span>
+            {isCryoPipeSafe && !isRadiationHazard ? (
+              <span className="text-xs font-mono text-emerald-400 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" /> Nominal
+              </span>
+            ) : (
+              <span className="text-xs font-mono text-rose-400 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> {isPipeFreezing ? 'Pipe Purge' : 'Rad Alert'}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold font-mono text-cyan-400 tabular-nums">
+              {pipeFlowRateLpm}
+            </span>
+            <span className="text-xs font-mono text-slate-400">
+              L/m · {effectiveDoseMsvYear.toFixed(0)} mSv/yr
+            </span>
+          </div>
+          <div className="mt-2 text-xs font-mono text-slate-500 flex items-center justify-between">
+            <span>Floor: ≥8 L/m</span>
+            <span className="text-cyan-400 text-[10px]">[CBF-PIPE]</span>
+          </div>
+        </div>
       </div>
 
       {/* Main Grid: VCG Negotiation & Disaster Injection */}
@@ -356,7 +370,7 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
         {/* Left 2 Cols: Constrained VCG Negotiation Engine */}
         <div
           className={`lg:col-span-2 p-6 bg-slate-900/60 rounded-xl border space-y-6 transition-all ${
-            activeLens === 'INFRASTRUCTURE' || activeLens === 'PSYCHOLOGY'
+            activeLens === 'INFRASTRUCTURE' || activeLens === 'PSYCHOLOGY' || activeLens === 'CULTURE'
               ? 'border-amber-500/70 ring-1 ring-amber-500/20'
               : 'border-slate-800'
           }`}
@@ -368,7 +382,10 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
                 <span>Constrained VCG Multi-Commodity Auction (Coupled Bus)</span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Fission ({fissionBaseKw} kW) + Planetary Lab PV ({pvArrayOutputKw} kW at τ={opticalDepthTau.toFixed(2)}) · Emotional Twin σ_allost={(allostaticLoad * 100).toFixed(0)}%
+                Fission ({fissionBaseKw} kW) + Planetary Lab PV ({pvArrayOutputKw} kW at τ={opticalDepthTau.toFixed(2)}) · Emotional Twin{' '}
+                {isSanctuaryRedacted
+                  ? 'REDACTED [SANCTUARY]'
+                  : `σ_allost=${(allostaticLoad * 100).toFixed(0)}%${isCircadianBoost ? ' · ϕ_circ>70%' : ''}`}
               </p>
             </div>
             <div className="text-right">
@@ -398,7 +415,7 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
             </div>
             <div
               className={`p-3 rounded border ${
-                isAllostaticPreemption
+                isAllostaticPreemption || isCircadianBoost
                   ? 'bg-purple-950/50 border-purple-500 text-purple-200'
                   : 'bg-slate-950/60 border-slate-800'
               }`}
@@ -408,7 +425,13 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
                 {((wEma / weightSum) * 100).toFixed(0)}%
               </div>
               <div className="text-[10px] text-purple-400 mt-0.5">
-                {isAllostaticPreemption ? 'PREEMPTION ACTIVE' : 'Allostatic defense'}
+                {isSanctuaryRedacted
+                  ? 'SANCTUARY OPACITY'
+                  : isAllostaticPreemption
+                  ? 'PREEMPTION ACTIVE'
+                  : isCircadianBoost
+                  ? 'CIRCADIAN BOOST'
+                  : 'Allostatic defense'}
               </div>
             </div>
             <div className="p-3 bg-slate-950/60 rounded border border-slate-800">
@@ -589,9 +612,11 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
                 <div>
                   <div className="text-xs font-semibold">Cohort Allostatic Overload (&gt;72%)</div>
                   <div className="text-[11px] text-slate-400">
-                    {isAllostaticPreemption
+                    {isSanctuaryRedacted
+                      ? 'Sanctuary Opacity: Biometric override paused'
+                      : isAllostaticPreemption
                       ? 'Active: AGT-EMA preempting sintering bus'
-                      : 'Nominal: σ_allost = 35%'}
+                      : `Nominal: σ_allost = ${(allostaticLoad * 100).toFixed(0)}%`}
                   </div>
                 </div>
                 <Brain className="w-4 h-4 text-purple-400" />
@@ -604,7 +629,13 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
       {/* Bottom Row: TMR Memory Scrubber & Swarm Robotics Token Router */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* TMR Bit-Scrubber Inspector */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-4">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-4 transition-all ${
+            activeLens === 'RESILIENCE' || activeLens === 'NARRATIVE'
+              ? 'border-amber-500/70 ring-1 ring-amber-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div>
               <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
@@ -612,11 +643,11 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
                 <span>TMR MRAM Bit-Scrubber &amp; SEU Defense</span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                2-of-3 bitwise majority voting against cosmic ray Single-Event Upsets
+                2-of-3 bitwise majority voting · Shielding SEU Flux: {seuBitFlipRatePerMsol} flips/mSol
               </p>
             </div>
             <div className="text-xs font-mono text-slate-400">
-              SCRUBBED: <span className="text-amber-400 font-bold tabular-nums">{seuCount}</span>
+              SCRUBBED: <span className="text-amber-400 font-bold tabular-nums">{seuCount + seuBitFlipRatePerMsol}</span>
             </div>
           </div>
 
@@ -656,7 +687,13 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
         </div>
 
         {/* Swarm Token-Router 0.38g & EVA Exclusion Halo */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-4">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-4 transition-all ${
+            activeLens === 'GEOGRAPHY' || activeLens === 'INFRASTRUCTURE'
+              ? 'border-cyan-500/70 ring-1 ring-cyan-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div>
               <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
@@ -672,24 +709,30 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
             </span>
           </div>
 
-          {/* Simple Interactive Voxel Arena Representation */}
+          {/* Simple Interactive Voxel Arena Representation coupled to activeSwarmRovers & Cognitive Throttle */}
           <div className="grid grid-cols-8 gap-1.5 p-3 bg-slate-950 rounded border border-slate-800 font-mono text-[10px]">
             {Array.from({ length: 32 }).map((_, idx) => {
               const isSelected = idx === activeRoverIdx;
-              const isEva = idx === 12; // Human EVA point
+              const isEvaSlot = idx === 12;
+              const isOnlineRover = idx < currentSettlement.activeSwarmRovers;
+              const isAutoEva = isEvaSlot && isCognitiveThrottle;
               return (
                 <button
                   key={idx}
                   onClick={() => setActiveRoverIdx(idx)}
                   className={`aspect-square rounded flex flex-col items-center justify-center transition-all ${
-                    isEva
+                    isAutoEva
+                      ? 'bg-purple-950/90 border border-purple-400 text-purple-200 font-bold'
+                      : isEvaSlot
                       ? 'bg-rose-950/80 border border-rose-500 text-rose-300'
                       : isSelected
                       ? 'bg-amber-500 text-slate-950 font-bold'
-                      : 'bg-slate-900 border border-slate-800 text-slate-400 hover:border-slate-600'
+                      : isOnlineRover
+                      ? 'bg-slate-900 border border-emerald-500/40 text-emerald-300 hover:border-emerald-400'
+                      : 'bg-slate-950 border border-slate-800/50 text-slate-600'
                   }`}
                 >
-                  <span>{isEva ? 'EVA' : `R${idx + 1}`}</span>
+                  <span>{isAutoEva ? 'AUTO' : isEvaSlot ? 'EVA' : `R${idx + 1}`}</span>
                 </button>
               );
             })}
@@ -700,7 +743,9 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
               Selected Unit: <strong className="text-slate-200">Rover #{activeRoverIdx + 1}</strong>{' '}
               {isCognitiveThrottle
                 ? '(Auto-Taking Over Human EVA Tasks due to κ_cog > 65%)'
-                : '(Microwave Sinterer)'}
+                : activeRoverIdx < currentSettlement.activeSwarmRovers
+                ? `(${currentSettlement.code} Active Microwave Sinterer)`
+                : '(Standby Depot Reserve)'}
             </span>
             <span className="text-slate-500">Speed: 4.2 km/h in 0.376g</span>
           </div>

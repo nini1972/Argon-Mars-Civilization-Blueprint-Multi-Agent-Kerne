@@ -23,6 +23,11 @@ import {
   SettlementId,
   SyntheticDaemonTelemetry,
 } from './types/blueprint';
+import {
+  computePlanetaryPhysics,
+  computeEnvironmentalTensor,
+  SETTLEMENT_TENSOR_BASELINES,
+} from './utils/physicsEngine';
 import { GitCompare, Camera, RotateCcw } from 'lucide-react';
 
 export default function App() {
@@ -96,33 +101,52 @@ export default function App() {
     waterLitersPerSol: 48882,
   });
 
-  // Closed-Loop Causal Coupling: Environment Perturbations -> Emotional Twins & Synthetic Daemon
-  useEffect(() => {
-    // High dust optical depth (tau >= 3.5) or high CO2 (> 400 Pa) or SPE radiation drives biopsychosocial stress
-    const dustFactor = Math.max(0, (opticalDepthTau - 0.85) / 5.15);
-    const co2Factor = Math.max(0, (co2PartialPressurePa - 240) / 450);
-    const speFactor = speProtonFlux >= 10 ? 0.28 : 0;
-    const hullFactor = hullPressurePa < 68000 ? 0.35 : 0;
+  // Live Shared Planetary Physics Engine (Single Source of Truth — DEF-02)
+  const livePhysics = computePlanetaryPhysics({
+    opticalDepthTau,
+    solarZenithDeg,
+    reactorCoreTempK,
+    chpShuntKw,
+    pipeFlowRateLpm,
+    shieldingType,
+    arealDepthGcm2,
+    speProtonFlux,
+  });
 
-    if (dustFactor > 0.05 || co2Factor > 0.05 || speFactor > 0 || hullFactor > 0) {
-      setHumanTensor((prev) => ({
-        circadianDesync: Math.min(1, Math.max(prev.circadianDesync, +(0.18 + dustFactor * 0.55).toFixed(2))),
-        allostaticLoad: Math.min(
-          1,
-          Math.max(prev.allostaticLoad, +(0.35 + dustFactor * 0.38 + speFactor + hullFactor).toFixed(2))
-        ),
-        cognitiveFatigue: Math.min(
-          1,
-          Math.max(prev.cognitiveFatigue, +(0.28 + co2Factor * 0.55 + dustFactor * 0.25).toFixed(2))
-        ),
-        proxemicCrowding: Math.min(
-          1,
-          Math.max(prev.proxemicCrowding, +(0.22 + dustFactor * 0.52 + speFactor * 1.4).toFixed(2))
-        ),
-        vestibularStrain: prev.vestibularStrain,
-      }));
-    }
-  }, [opticalDepthTau, co2PartialPressurePa, speProtonFlux, hullPressurePa]);
+  // Reversible Closed-Loop Causal Coupling: Environment & Settlement -> Emotional Twins & Synthetic Daemon (DEF-01)
+  useEffect(() => {
+    const nextTensor = computeEnvironmentalTensor({
+      settlementId: activeSettlementId,
+      opticalDepthTau,
+      co2PartialPressurePa,
+      speProtonFlux,
+      hullPressurePa,
+      effectiveDoseMsvYear: livePhysics.effectiveDoseMsvYear,
+      pipeFlowRateLpm,
+    });
+    setHumanTensor(nextTensor);
+
+    const dustFactor = Math.max(0, (opticalDepthTau - 0.45) / 5.55);
+    setSyntheticDaemon((prev) => ({
+      ...prev,
+      seuBitCorrectionRate: livePhysics.seuBitFlipRatePerMsol,
+      vcgDeficitPressure: +(Math.min(0.95, 0.12 + dustFactor * 0.55 + (reactorCoreTempK > 1100 ? 0.25 : 0))).toFixed(2),
+      entropyDivergence: +(Math.min(0.48, 0.04 + dustFactor * 0.22 + (speProtonFlux >= 10 ? 0.14 : 0))).toFixed(2),
+      syntheticEmpathyIndex: +(Math.min(0.99, 0.90 + (nextTensor.allostaticLoad >= 0.72 ? 0.07 : 0.02))).toFixed(2),
+    }));
+  }, [
+    activeSettlementId,
+    opticalDepthTau,
+    co2PartialPressurePa,
+    speProtonFlux,
+    hullPressurePa,
+    shieldingType,
+    arealDepthGcm2,
+    pipeFlowRateLpm,
+    reactorCoreTempK,
+    livePhysics.effectiveDoseMsvYear,
+    livePhysics.seuBitFlipRatePerMsol,
+  ]);
 
   // Simulation Clock Tick Engine
   useEffect(() => {
@@ -160,14 +184,9 @@ export default function App() {
     });
   };
 
-  // Live Derived Power & Water for Delta Diff Bar
-  const cosZenith = Math.max(0.01, Math.cos((solarZenithDeg * Math.PI) / 180));
-  const directFlux = 589.2 * cosZenith * Math.exp(-opticalDepthTau / cosZenith);
-  const diffuseFlux = (589.2 * cosZenith - directFlux) * (0.58 * (1 - Math.exp(-0.65 * opticalDepthTau)));
-  const pvYieldWattsPerM2 = Math.max(0, directFlux + diffuseFlux) * 0.28;
-  const totalPowerKw = (reactorCoreTempK > 1100 ? 320 : 580) + Math.round(pvYieldWattsPerM2 * 3.2);
-  const currentContestableKw = Math.max(0, totalPowerKw - 350);
-  const currentWaterLitersPerSol = Math.round(((Math.max(0, chpShuntKw - 45) * 3600) / 499) * 24.66);
+  // Live Derived Power & Water from Shared Physics Engine (DEF-02)
+  const currentContestableKw = livePhysics.contestablePowerKw;
+  const currentWaterLitersPerSol = livePhysics.meltRateLitersPerSol;
 
   const captureSnapshot = () => {
     setBaselineSnapshot({
@@ -200,11 +219,7 @@ export default function App() {
     setShieldingType('graded_z');
     setArealDepthGcm2(180);
     setHumanTensor({
-      circadianDesync: 0.18,
-      allostaticLoad: 0.35,
-      cognitiveFatigue: 0.28,
-      proxemicCrowding: 0.22,
-      vestibularStrain: 0.08,
+      ...(SETTLEMENT_TENSOR_BASELINES[activeSettlementId] || SETTLEMENT_TENSOR_BASELINES['arcadia-prime']),
     });
     setAutonomyLevel('AL2_NOMINAL_AUTONOMOUS');
   };
@@ -285,17 +300,21 @@ export default function App() {
                 <span className="text-slate-400">Allostatic Load: </span>
                 <span
                   className={`font-bold ${
-                    humanTensor.allostaticLoad > baselineSnapshot.humanTensor.allostaticLoad
+                    sanctuaryMode === 'SANCTUARY_BLACKOUT'
+                      ? 'text-emerald-400'
+                      : humanTensor.allostaticLoad > baselineSnapshot.humanTensor.allostaticLoad
                       ? 'text-rose-400'
                       : 'text-emerald-400'
                   }`}
                 >
-                  {formatDelta(
-                    humanTensor.allostaticLoad * 100,
-                    baselineSnapshot.humanTensor.allostaticLoad * 100,
-                    '%',
-                    0
-                  )}
+                  {sanctuaryMode === 'SANCTUARY_BLACKOUT'
+                    ? 'REDACTED [SANCTUARY]'
+                    : formatDelta(
+                        humanTensor.allostaticLoad * 100,
+                        baselineSnapshot.humanTensor.allostaticLoad * 100,
+                        '%',
+                        0
+                      )}
                 </span>
               </div>
             </div>
@@ -360,6 +379,8 @@ export default function App() {
             setChpShuntKw={setChpShuntKw}
             pipeFlowRateLpm={pipeFlowRateLpm}
             setPipeFlowRateLpm={setPipeFlowRateLpm}
+            shieldingType={shieldingType}
+            arealDepthGcm2={arealDepthGcm2}
             humanTensor={humanTensor}
             setHumanTensor={setHumanTensor}
             sanctuaryMode={sanctuaryMode}
@@ -406,6 +427,9 @@ export default function App() {
             setReactorCoreTempK={setReactorCoreTempK}
             chpShuntKw={chpShuntKw}
             pipeFlowRateLpm={pipeFlowRateLpm}
+            shieldingType={shieldingType}
+            arealDepthGcm2={arealDepthGcm2}
+            sanctuaryMode={sanctuaryMode}
             humanTensor={humanTensor}
             setHumanTensor={setHumanTensor}
             onNavigateTab={setActiveTab}
@@ -428,6 +452,9 @@ export default function App() {
             setShieldingType={setShieldingType}
             arealDepthGcm2={arealDepthGcm2}
             setArealDepthGcm2={setArealDepthGcm2}
+            speProtonFlux={speProtonFlux}
+            reactorCoreTempK={reactorCoreTempK}
+            sanctuaryMode={sanctuaryMode}
             humanTensor={humanTensor}
             onNavigateTab={setActiveTab}
             onResetNominal={handleResetNominal}
@@ -455,6 +482,7 @@ export default function App() {
             activeLens={activeLens}
             sol={sol}
             setSol={setSol}
+            activeSettlementId={activeSettlementId}
             setActiveSettlementId={setActiveSettlementId}
             setHumanTensor={setHumanTensor}
             onNavigateTab={setActiveTab}

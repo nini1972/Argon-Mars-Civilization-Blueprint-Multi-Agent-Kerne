@@ -95,6 +95,24 @@ const EPOCH_MILESTONES = [
   },
 ];
 
+const AGENT_LENS_MAP: Record<string, CivilizationLens[]> = {
+  'AGT-PSS': ['GEOGRAPHY', 'RESILIENCE'],
+  'AGT-TKA': ['INFRASTRUCTURE', 'RESILIENCE'],
+  'AGT-EMA': ['PSYCHOLOGY', 'CULTURE'],
+  'AGT-CUD': ['NARRATIVE', 'CULTURE'],
+  'AGT-GMA': ['INFRASTRUCTURE', 'RESILIENCE', 'GEOGRAPHY'],
+};
+
+const MODULE_LENS_MAP: Record<string, CivilizationLens[]> = {
+  'Module 1': ['GEOGRAPHY', 'RESILIENCE'],
+  'Module 2': ['INFRASTRUCTURE', 'RESILIENCE'],
+  'Module 3': ['PSYCHOLOGY', 'CULTURE'],
+  'Module 4': ['NARRATIVE', 'CULTURE'],
+  'Module 5': ['RESILIENCE', 'INFRASTRUCTURE'],
+  'Module 6': ['CULTURE', 'PSYCHOLOGY'],
+  'Module 7': ['GEOGRAPHY', 'INFRASTRUCTURE'],
+};
+
 export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
   onNavigateTab,
   activeLens = 'ALL',
@@ -107,6 +125,13 @@ export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
   const currentSettlement =
     SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0];
 
+  const getLensStyle = (lenses: CivilizationLens[]) => {
+    if (activeLens === 'ALL') return 'border-slate-800';
+    return lenses.includes(activeLens)
+      ? 'border-amber-500/90 ring-1 ring-amber-500/30 bg-slate-900/90'
+      : 'border-slate-800/50 opacity-70';
+  };
+
   return (
     <div className="space-y-10">
       {/* Hero Overview */}
@@ -117,6 +142,8 @@ export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
               <span>ARGON MARS OS 5.0 (CONVERGENCE RELEASE)</span>
               <span>·</span>
               <span>UNIFIED CIVILIZATION STATE BUS</span>
+              <span>·</span>
+              <span className="text-cyan-400">LENS: {activeLens}</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
               The Unified Mars Civilization Blueprint &amp; Multi-Agent Operating System
@@ -329,7 +356,9 @@ export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
           {SPECIALIST_AGENTS.map((agent) => (
             <div
               key={agent.id}
-              className="p-5 bg-slate-900/60 rounded-xl border border-slate-800 space-y-3 flex flex-col justify-between"
+              className={`p-5 bg-slate-900/60 rounded-xl border space-y-3 flex flex-col justify-between transition-all ${getLensStyle(
+                AGENT_LENS_MAP[agent.id] || ['INFRASTRUCTURE']
+              )}`}
             >
               <div>
                 <div className="flex items-center justify-between text-xs font-mono">
@@ -368,7 +397,9 @@ export const BlueprintExplorer: React.FC<BlueprintExplorerProps> = ({
           {BLUEPRINT_SECTIONS.map((sec) => (
             <div
               key={sec.id}
-              className="p-5 bg-slate-900/60 rounded-xl border border-slate-800 space-y-3"
+              className={`p-5 bg-slate-900/60 rounded-xl border space-y-3 transition-all ${getLensStyle(
+                MODULE_LENS_MAP[sec.moduleId] || ['INFRASTRUCTURE']
+              )}`}
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">

@@ -300,6 +300,7 @@ export const SETTLEMENT_SITES: SettlementSite[] = [
 ];
 
 interface D3MarsMapProps {
+  activeSettlementId?: string;
   onSelectSite?: (site: SettlementSite) => void;
   onOpenIntegratedTwin?: (site: SettlementSite) => void;
   showMaglev?: boolean;
@@ -308,6 +309,7 @@ interface D3MarsMapProps {
 }
 
 export const D3MarsMap: React.FC<D3MarsMapProps> = ({
+  activeSettlementId,
   onSelectSite,
   onOpenIntegratedTwin,
   showMaglev = true,
@@ -319,13 +321,26 @@ export const D3MarsMap: React.FC<D3MarsMapProps> = ({
 
   // Map state
   const [projectionType, setProjectionType] = useState<'orthographic' | 'equirectangular'>('orthographic');
-  const [rotation, setRotation] = useState<[number, number, number]>([-110, -15, 0]);
+  const [rotation, setRotation] = useState<[number, number, number]>([-171.0, -39.2, 0]);
   const [scale, setScale] = useState<number>(245);
   const [isRotating, setIsRotating] = useState<boolean>(false);
-  const [activePopupSite, setActivePopupSite] = useState<SettlementSite | null>(SETTLEMENT_SITES[0]);
+  const [activePopupSite, setActivePopupSite] = useState<SettlementSite | null>(
+    () => SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0]
+  );
   const [hoveredSite, setHoveredSite] = useState<SettlementSite | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
   const [cursorCoords, setCursorCoords] = useState<[number, number] | null>(null);
+
+  // Sync D3 Globe & Popup Card whenever global activeSettlementId changes (DEF-05)
+  useEffect(() => {
+    if (!activeSettlementId) return;
+    const matched = SETTLEMENT_SITES.find((s) => s.id === activeSettlementId);
+    if (matched) {
+      setActivePopupSite(matched);
+      setIsRotating(false);
+      setRotation([-matched.coordinates[0], -matched.coordinates[1], 0]);
+    }
+  }, [activeSettlementId]);
 
   // Animation frame ref for smooth spin
   const animRef = useRef<number | null>(null);

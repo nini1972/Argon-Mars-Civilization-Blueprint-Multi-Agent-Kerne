@@ -8,7 +8,9 @@ import {
   CivilizationLens,
   DashboardTab,
   HomeostaticTensor,
+  SanctuaryMode,
 } from '../types/blueprint';
+import { computePlanetaryPhysics } from '../utils/physicsEngine';
 import {
   Sun,
   Droplets,
@@ -36,6 +38,9 @@ interface PlanetarySimulationLabProps {
   setShieldingType?: (t: 'dry_basalt' | 'graded_z') => void;
   arealDepthGcm2?: number;
   setArealDepthGcm2?: (d: number) => void;
+  speProtonFlux?: number;
+  reactorCoreTempK?: number;
+  sanctuaryMode?: SanctuaryMode;
   humanTensor?: HomeostaticTensor;
   onNavigateTab?: (tab: DashboardTab) => void;
   onResetNominal?: () => void;
@@ -55,6 +60,9 @@ export const PlanetarySimulationLab: React.FC<PlanetarySimulationLabProps> = ({
   setShieldingType: propSetShielding,
   arealDepthGcm2: propDepth,
   setArealDepthGcm2: propSetDepth,
+  speProtonFlux = 0.1,
+  reactorCoreTempK = 1050,
+  sanctuaryMode = 'ACTIVE_COHORT_SYNC',
   humanTensor,
   onNavigateTab,
   onResetNominal,
@@ -85,45 +93,33 @@ export const PlanetarySimulationLab: React.FC<PlanetarySimulationLabProps> = ({
   const arealDepthGcm2 = propDepth !== undefined ? propDepth : localDepth;
   const setArealDepthGcm2 = propSetDepth || setLocalDepth;
 
-  // Delta-Eddington calculations
-  const cosZenith = Math.max(0.01, Math.cos((solarZenithDeg * Math.PI) / 180));
-  const toaFlux = 589.2; // W/m^2 mean Mars
-  const directFlux = toaFlux * cosZenith * Math.exp(-opticalDepthTau / cosZenith);
-  const diffuseRatio = 0.58 * (1 - Math.exp(-0.65 * opticalDepthTau));
-  const diffuseFlux = (toaFlux * cosZenith - directFlux) * diffuseRatio;
-  const totalSurfaceFlux = Math.max(0, directFlux + diffuseFlux);
-  const pvEfficiency = 0.28; // Modern multi-junction InGaP/GaAs/Ge
-  const pvYieldWattsPerM2 = totalSurfaceFlux * pvEfficiency;
+  // Shared Planetary Physics Engine (DEF-02)
+  const physics = computePlanetaryPhysics({
+    opticalDepthTau,
+    solarZenithDeg,
+    reactorCoreTempK,
+    chpShuntKw,
+    pipeFlowRateLpm,
+    shieldingType,
+    arealDepthGcm2,
+    speProtonFlux,
+  });
 
-  // Rodwell Stefan Cavity calculations
-  const conductiveLossKw = 45;
-  const netMeltKw = Math.max(0, chpShuntKw - conductiveLossKw);
-  const meltRateKgPerHour = (netMeltKw * 3600) / 499; // kg/hour
-  const meltRateLitersPerSol = Math.round(meltRateKgPerHour * 24.66);
+  const {
+    directFlux,
+    diffuseFlux,
+    pvYieldWattsPerM2,
+    pvArrayOutputKw: projectedPvContributionKw,
+    netMeltKw,
+    meltRateLitersPerSol,
+    isPipeFreezing,
+    effectiveDoseMsvYear,
+  } = physics;
 
-  // Pipe freeze risk
-  const isPipeFreezing = pipeFlowRateLpm < 8;
-
-  // Radiation dose calculation
-  let effectiveDoseMsvYear = 240;
-  if (shieldingType === 'dry_basalt') {
-    if (arealDepthGcm2 < 45) {
-      // Secondary neutron buildup peak!
-      effectiveDoseMsvYear = 240 * (1 + 0.35 * Math.sin((arealDepthGcm2 / 45) * Math.PI));
-    } else {
-      effectiveDoseMsvYear = 240 * Math.exp(-(arealDepthGcm2 - 45) / 120);
-    }
-  } else {
-    // Graded-Z with water/polyethylene moderator wall
-    effectiveDoseMsvYear = 240 * Math.exp(-arealDepthGcm2 / 55);
-  }
-
-  // Downstream Causal Projections for Kernel & Emotional Twins
-  const projectedPvContributionKw = Math.round(pvYieldWattsPerM2 * 3.2);
-  const projectedCircadianDriftImpact = Math.min(100, Math.round(14 + opticalDepthTau * 12));
+  const projectedCircadianDriftImpact = Math.min(100, Math.round(18 + Math.max(0, (opticalDepthTau - 0.45) / 5.55) * 56));
   const projectedConfinementStressImpact = Math.min(
     100,
-    Math.round(28 + opticalDepthTau * 10 + (effectiveDoseMsvYear > 50 ? 22 : 0))
+    Math.round(35 + Math.max(0, (opticalDepthTau - 0.45) / 5.55) * 54 + (effectiveDoseMsvYear > 50 ? 22 : 0))
   );
 
   return (
@@ -208,7 +204,13 @@ export const PlanetarySimulationLab: React.FC<PlanetarySimulationLabProps> = ({
               <span>→ Emotional Twin Stress</span>
             </div>
             <div className="text-base font-bold text-purple-300 mt-0.5 tabular-nums">
-              ϕ_circ: {humanTensor ? (humanTensor.circadianDesync * 100).toFixed(0) : projectedCircadianDriftImpact}% · σ_allost: {humanTensor ? (humanTensor.allostaticLoad * 100).toFixed(0) : projectedConfinementStressImpact}%
+              {sanctuaryMode === 'SANCTUARY_BLACKOUT'
+                ? 'REDACTED [SANCTUARY]'
+                : `ϕ_circ: ${
+                    humanTensor ? (humanTensor.circadianDesync * 100).toFixed(0) : projectedCircadianDriftImpact
+                  }% · σ_allost: ${
+                    humanTensor ? (humanTensor.allostaticLoad * 100).toFixed(0) : projectedConfinementStressImpact
+                  }%`}
             </div>
           </div>
           {onNavigateTab && (
@@ -228,7 +230,7 @@ export const PlanetarySimulationLab: React.FC<PlanetarySimulationLabProps> = ({
         {/* Lab 1: Delta-Eddington Radiative Transfer */}
         <div
           className={`p-6 bg-slate-900/60 rounded-xl border space-y-6 transition-all ${
-            activeLens === 'GEOGRAPHY' || activeLens === 'RESILIENCE'
+            activeLens === 'GEOGRAPHY' || activeLens === 'RESILIENCE' || activeLens === 'NARRATIVE'
               ? 'border-cyan-500/70 ring-1 ring-cyan-500/20'
               : 'border-slate-800'
           }`}
@@ -408,7 +410,7 @@ export const PlanetarySimulationLab: React.FC<PlanetarySimulationLabProps> = ({
       {/* Lab 3: Radiation Exposure & Secondary Neutron Spallation Paradox */}
       <div
         className={`p-6 bg-slate-900/60 rounded-xl border space-y-6 transition-all ${
-          activeLens === 'RESILIENCE' || activeLens === 'PSYCHOLOGY'
+          activeLens === 'RESILIENCE' || activeLens === 'PSYCHOLOGY' || activeLens === 'CULTURE'
             ? 'border-rose-500/70 ring-1 ring-rose-500/20'
             : 'border-slate-800'
         }`}

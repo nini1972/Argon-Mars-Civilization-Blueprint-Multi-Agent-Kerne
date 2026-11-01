@@ -16,6 +16,10 @@ import { SETTLEMENT_SITES, SettlementSite } from './D3MarsMap';
 import { ATLAS_PLATES } from '../data/atlasPlatesData';
 import { CANON_FILMS } from '../data/blueprintData';
 import {
+  computePlanetaryPhysics,
+  computeKernelVcgAuction,
+} from '../utils/physicsEngine';
+import {
   MapPin,
   Cpu,
   Sun,
@@ -64,6 +68,8 @@ interface ArcadiaPrimeIntegratedViewProps {
   setChpShuntKw: (kw: number) => void;
   pipeFlowRateLpm: number;
   setPipeFlowRateLpm: (lpm: number) => void;
+  shieldingType?: 'dry_basalt' | 'graded_z';
+  arealDepthGcm2?: number;
   humanTensor: HomeostaticTensor;
   setHumanTensor: React.Dispatch<React.SetStateAction<HomeostaticTensor>>;
   sanctuaryMode: SanctuaryMode;
@@ -98,6 +104,8 @@ export const ArcadiaPrimeIntegratedView: React.FC<ArcadiaPrimeIntegratedViewProp
   setChpShuntKw,
   pipeFlowRateLpm,
   setPipeFlowRateLpm,
+  shieldingType = 'graded_z',
+  arealDepthGcm2 = 180,
   humanTensor,
   setHumanTensor,
   sanctuaryMode,
@@ -111,54 +119,53 @@ export const ArcadiaPrimeIntegratedView: React.FC<ArcadiaPrimeIntegratedViewProp
   const site: SettlementSite =
     SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0];
 
-  // Coupled Physics Calculations (from PlanetarySimulationLab)
-  const cosZenith = Math.max(0.01, Math.cos((solarZenithDeg * Math.PI) / 180));
-  const toaFlux = 589.2;
-  const directFlux = toaFlux * cosZenith * Math.exp(-opticalDepthTau / cosZenith);
-  const diffuseRatio = 0.58 * (1 - Math.exp(-0.65 * opticalDepthTau));
-  const diffuseFlux = (toaFlux * cosZenith - directFlux) * diffuseRatio;
-  const totalSurfaceFlux = Math.max(0, directFlux + diffuseFlux);
-  const pvYieldWattsPerM2 = totalSurfaceFlux * 0.28;
+  // Shared Planetary Physics Engine (DEF-02)
+  const physics = computePlanetaryPhysics({
+    opticalDepthTau,
+    solarZenithDeg,
+    reactorCoreTempK,
+    chpShuntKw,
+    pipeFlowRateLpm,
+    shieldingType,
+    arealDepthGcm2,
+    speProtonFlux,
+    settlementPopulation: site.population,
+  });
 
-  // Rodwell Cryo-Hydrology
-  const netMeltKw = Math.max(0, chpShuntKw - 45);
-  const meltRateLitersPerSol = Math.round(((netMeltKw * 3600) / 499) * 24.66);
-  const isPipeFreezing = pipeFlowRateLpm < 8;
+  const {
+    directFlux,
+    diffuseFlux,
+    pvYieldWattsPerM2,
+    totalPowerSupplyKw: totalPowerSupply,
+    contestablePowerKw: contestablePower,
+    meltRateLitersPerSol,
+    isPipeFreezing,
+    effectiveDoseMsvYear,
+  } = physics;
 
-  // Coupled Kernel & Emotional Preemption Weights
-  const isSpeEmergency = speProtonFlux >= 10;
-  const isDustStorm = opticalDepthTau >= 3.5;
-  const isAllostaticPreemption = humanTensor.allostaticLoad >= 0.72;
+  // Harmonized Kernel & Emotional Preemption Weights (DEF-03, DEF-04, DEF-06)
+  const vcg = computeKernelVcgAuction({
+    opticalDepthTau,
+    speProtonFlux,
+    chpShuntKw,
+    pipeFlowRateLpm,
+    effectiveDoseMsvYear,
+    contestablePowerKw: contestablePower,
+    humanTensor,
+    sanctuaryMode,
+  });
 
-  let wTka = 0.35;
-  let wPss = 0.20;
-  let wEma = 0.35;
-  let wCud = 0.10;
-
-  if (isSpeEmergency) {
-    wTka = 0.52;
-    wPss = 0.28;
-    wEma = isAllostaticPreemption ? 0.20 : 0.15;
-    wCud = 0.00;
-  } else if (isDustStorm) {
-    wTka = 0.45;
-    wPss = 0.30;
-    wEma = isAllostaticPreemption ? 0.25 : 0.18;
-    wCud = 0.00;
-  } else if (isAllostaticPreemption) {
-    // Emotional Twin Preemption: AGT-EMA overrides industrial sintering to restore human homeostasis
-    wTka = 0.25;
-    wPss = 0.18;
-    wEma = 0.47;
-    wCud = 0.10;
-  }
-
-  const weightSum = wTka + wPss + wEma + wCud;
-  const pvContributionKw = Math.round(pvYieldWattsPerM2 * 3.2);
-  const fissionBaseKw = reactorCoreTempK > 1100 ? 320 : 580;
-  const totalPowerSupply = fissionBaseKw + pvContributionKw;
-  const ethPowerFloor = 350;
-  const contestablePower = Math.max(0, totalPowerSupply - ethPowerFloor);
+  const {
+    wTka,
+    wPss,
+    wEma,
+    wCud,
+    weightSum,
+    isSpeEmergency,
+    isDustStorm,
+    isAllostaticPreemption,
+    isSanctuaryRedacted,
+  } = vcg;
 
   // Critical-Path 50-Year Spine Slippage Predictor
   const powerDeficitRatio = Math.max(0, (820 - totalPowerSupply) / 820);
@@ -325,13 +332,21 @@ export const ArcadiaPrimeIntegratedView: React.FC<ArcadiaPrimeIntegratedViewProp
             <div className="text-[10px] text-slate-500 uppercase">Cohort Allostatic Load</div>
             <div
               className={`text-base font-bold mt-0.5 tabular-nums ${
-                isAllostaticPreemption ? 'text-rose-400' : 'text-purple-300'
+                isSanctuaryRedacted
+                  ? 'text-emerald-400'
+                  : isAllostaticPreemption
+                  ? 'text-rose-400'
+                  : 'text-purple-300'
               }`}
             >
-              {(humanTensor.allostaticLoad * 100).toFixed(0)}%
+              {isSanctuaryRedacted ? 'REDACTED' : `${(humanTensor.allostaticLoad * 100).toFixed(0)}%`}
             </div>
             <div className="text-[10px] text-slate-400">
-              {isAllostaticPreemption ? 'AGT-EMA Preemption ON' : 'Homeostasis Nominal'}
+              {isSanctuaryRedacted
+                ? 'Sanctuary Opacity ON'
+                : isAllostaticPreemption
+                ? 'AGT-EMA Preemption ON'
+                : 'Homeostasis Nominal'}
             </div>
           </div>
 
@@ -433,10 +448,19 @@ export const ArcadiaPrimeIntegratedView: React.FC<ArcadiaPrimeIntegratedViewProp
                   LAVA TUBE HABITAT DECK ({(hullPressurePa / 1000).toFixed(1)} kPa · PO2 {(o2PartialPressurePa / 1000).toFixed(1)} kPa)
                 </text>
                 <text x="35" y="132" fill="#cbd5e1" fontSize="9" fontFamily="monospace">
-                  Circadian Sky-Cove: {humanTensor.circadianDesync > 0.5 ? '6500K Entrainment Boost' : '4200K Nominal Sol Sync'}
+                  Circadian Sky-Cove:{' '}
+                  {isSanctuaryRedacted
+                    ? 'Sanctuary Protected Baseline'
+                    : humanTensor.circadianDesync > 0.5
+                    ? '6500K Entrainment Boost'
+                    : '4200K Nominal Sol Sync'}
                 </text>
                 <text x="35" y="147" fill="#a855f7" fontSize="9" fontFamily="monospace">
-                  ZK-PSE Cohort Stress: {(humanTensor.allostaticLoad * 100).toFixed(0)}% · CO2: {co2PartialPressurePa} Pa
+                  ZK-PSE Cohort Stress:{' '}
+                  {isSanctuaryRedacted
+                    ? 'REDACTED [SANCTUARY]'
+                    : `${(humanTensor.allostaticLoad * 100).toFixed(0)}%`}{' '}
+                  · CO2: {co2PartialPressurePa} Pa
                 </text>
               </g>
 
@@ -829,6 +853,12 @@ export const ArcadiaPrimeIntegratedView: React.FC<ArcadiaPrimeIntegratedViewProp
                 key: 'proxemicCrowding' as keyof HomeostaticTensor,
                 action: 'Botanical Atrium Access Priority',
               },
+              {
+                label: 'ν_vestib (Vestibular Strain)',
+                val: humanTensor.vestibularStrain,
+                key: 'vestibularStrain' as keyof HomeostaticTensor,
+                action: '0.376g Kinesthetic Calibration',
+              },
             ].map((item) => (
               <div key={item.key} className="space-y-1">
                 <div className="flex justify-between text-[11px]">
@@ -857,7 +887,9 @@ export const ArcadiaPrimeIntegratedView: React.FC<ArcadiaPrimeIntegratedViewProp
           <div className="p-2.5 rounded-lg bg-purple-950/20 border border-purple-500/30 text-[11px] text-purple-200 font-mono flex items-center justify-between">
             <span>ARCHITECTURAL BIO-FEEDBACK:</span>
             <span>
-              {isAllostaticPreemption
+              {isSanctuaryRedacted
+                ? 'SANCTUARY OPACITY — Zero biometric leakage; constitutional baseline active'
+                : isAllostaticPreemption
                 ? 'ACTIVE — Throttling non-essential EVA & routing +45 kW to Biophilia'
                 : 'STANDBY — Cohort within nominal allostatic envelope'}
             </span>
@@ -1038,7 +1070,13 @@ export const ArcadiaPrimeIntegratedView: React.FC<ArcadiaPrimeIntegratedViewProp
               2. <span className="text-amber-400">[Multi-Agent Kernel]</span> Contestable Bus={contestablePower} kW | w_EMA={((wEma / weightSum) * 100).toFixed(0)}%
             </div>
             <div className="text-slate-300">
-              3. <span className="text-purple-400">[Emotional Twins]</span> σ_allost={(humanTensor.allostaticLoad * 100).toFixed(0)}% | κ_cog={(humanTensor.cognitiveFatigue * 100).toFixed(0)}% → Spine Slippage: +{projectedMilestoneSlipSols} Sols
+              3. <span className="text-purple-400">[Emotional Twins]</span>{' '}
+              {isSanctuaryRedacted
+                ? 'REDACTED [SANCTUARY]'
+                : `σ_allost=${(humanTensor.allostaticLoad * 100).toFixed(0)}% | κ_cog=${(
+                    humanTensor.cognitiveFatigue * 100
+                  ).toFixed(0)}%`}{' '}
+              → Spine Slippage: +{projectedMilestoneSlipSols} Sols
             </div>
           </div>
         </div>

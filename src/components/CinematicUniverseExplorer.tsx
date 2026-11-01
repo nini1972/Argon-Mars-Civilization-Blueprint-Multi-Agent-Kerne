@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CANON_FILMS,
   CANON_SERIES,
@@ -17,6 +17,7 @@ import {
   HomeostaticTensor,
   SettlementId,
 } from '../types/blueprint';
+import { SETTLEMENT_SITES } from './D3MarsMap';
 import { audioSynth } from '../utils/audioSynth';
 import {
   Film,
@@ -38,6 +39,7 @@ interface CinematicUniverseExplorerProps {
   activeLens?: CivilizationLens;
   sol?: number;
   setSol?: (sol: number) => void;
+  activeSettlementId?: SettlementId;
   setActiveSettlementId?: (id: SettlementId) => void;
   setHumanTensor?: React.Dispatch<React.SetStateAction<HomeostaticTensor>>;
   onNavigateTab?: (tab: DashboardTab) => void;
@@ -62,6 +64,7 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
   activeLens = 'ALL',
   sol = 142,
   setSol,
+  activeSettlementId = 'arcadia-prime',
   setActiveSettlementId,
   setHumanTensor,
   onNavigateTab,
@@ -70,6 +73,31 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
   const [selectedEpoch, setSelectedEpoch] = useState<string>('all');
   const [selectedFilm, setSelectedFilm] = useState<FilmCanonEntry | null>(CANON_FILMS[0]);
   const [playingMotif, setPlayingMotif] = useState<string | null>(null);
+
+  const currentSettlement =
+    SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0];
+
+  // Auto-select canonical film matching activeSettlementId when settlement context switches (DEF-05)
+  useEffect(() => {
+    const matchedFilm = CANON_FILMS.find(
+      (f) => FILM_SPATIAL_SOL_MAP[f.id]?.settlement === activeSettlementId
+    );
+    if (matchedFilm) {
+      setSelectedFilm(matchedFilm);
+      setSelectedEpoch('all');
+    }
+  }, [activeSettlementId]);
+
+  // Switch sub-tab automatically when CULTURE or PSYCHOLOGY lens is selected (DEF-07)
+  useEffect(() => {
+    if (activeLens === 'CULTURE') {
+      setActiveTab('glossary');
+    } else if (activeLens === 'PSYCHOLOGY') {
+      setActiveTab('characters');
+    } else if (activeLens === 'NARRATIVE') {
+      setActiveTab('films');
+    }
+  }, [activeLens]);
 
   const epochs = [
     { id: 'all', label: 'All 50 Years' },
@@ -123,7 +151,9 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
             <span>·</span>
             <span>SECTION [Cinematic-Bible]</span>
             <span>·</span>
-            <span>DIEGETIC WORLD &amp; 50-YEAR CANON</span>
+            <span>ANCHOR: {currentSettlement.code} ({currentSettlement.name.toUpperCase()})</span>
+            <span>·</span>
+            <span className="text-cyan-400">LENS: {activeLens}</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
             Cinematic Universe &amp; Diegetic Bible
@@ -183,7 +213,13 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
       </div>
 
       {/* Diegetic Audio Leitmotif Synthesizer Bar */}
-      <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+      <div
+        className={`p-4 bg-slate-900/80 rounded-xl border flex flex-wrap items-center justify-between gap-4 transition-all ${
+          activeLens === 'CULTURE' || activeLens === 'NARRATIVE'
+            ? 'border-amber-500/80 ring-1 ring-amber-500/30'
+            : 'border-slate-800'
+        }`}
+      >
         <div className="flex items-center gap-3">
           <Music className="w-5 h-5 text-amber-500 shrink-0" />
           <div>
@@ -249,6 +285,7 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
               {filteredFilms.map((film) => {
                 const isSelected = selectedFilm?.id === film.id;
                 const pin = FILM_SPATIAL_SOL_MAP[film.id];
+                const isSettlementMatch = pin?.settlement === activeSettlementId;
                 return (
                   <button
                     key={film.id}
@@ -256,6 +293,8 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
                     className={`w-full p-4 rounded-xl border text-left transition-all ${
                       isSelected
                         ? 'bg-slate-900 border-amber-500/80 shadow-lg'
+                        : isSettlementMatch
+                        ? 'bg-slate-900/50 border-cyan-500/50 hover:border-cyan-400'
                         : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
                     }`}
                   >
@@ -267,7 +306,17 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
                     <p className="text-xs text-slate-400 line-clamp-2 mt-1">{film.logline}</p>
                     <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 font-mono">
                       <span>{film.epoch}</span>
-                      {pin && <span className="text-cyan-400">{pin.settlementLabel.split(' (')[0]}</span>}
+                      {pin && (
+                        <span
+                          className={
+                            isSettlementMatch
+                              ? 'px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 font-bold'
+                              : 'text-cyan-400'
+                          }
+                        >
+                          {pin.settlementLabel.split(' (')[0]}
+                        </span>
+                      )}
                     </div>
                   </button>
                 );
@@ -338,7 +387,13 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                    <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <div
+                      className={`p-4 bg-slate-950 rounded-lg border space-y-2 transition-all ${
+                        activeLens === 'GEOGRAPHY' || activeLens === 'INFRASTRUCTURE'
+                          ? 'border-amber-500/80 ring-1 ring-amber-500/20'
+                          : 'border-slate-800'
+                      }`}
+                    >
                       <div className="text-xs font-mono text-amber-500 font-semibold flex items-center gap-1.5">
                         <Camera className="w-3.5 h-3.5" />
                         <span>Camera Language &amp; Optics</span>
@@ -348,7 +403,13 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
                       </p>
                     </div>
 
-                    <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                    <div
+                      className={`p-4 bg-slate-950 rounded-lg border space-y-2 transition-all ${
+                        activeLens === 'CULTURE' || activeLens === 'NARRATIVE'
+                          ? 'border-cyan-500/80 ring-1 ring-cyan-500/20'
+                          : 'border-slate-800'
+                      }`}
+                    >
                       <div className="text-xs font-mono text-cyan-400 font-semibold flex items-center gap-1.5">
                         <Palette className="w-3.5 h-3.5" />
                         <span>Color Grading &amp; Lighting</span>
@@ -359,7 +420,13 @@ export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps>
                     </div>
                   </div>
 
-                  <div className="p-4 bg-slate-950 rounded-lg border border-slate-800 space-y-2">
+                  <div
+                    className={`p-4 bg-slate-950 rounded-lg border space-y-2 transition-all ${
+                      activeLens === 'PSYCHOLOGY' || activeLens === 'RESILIENCE' || activeLens === 'NARRATIVE'
+                        ? 'border-purple-500/80 ring-1 ring-purple-500/20'
+                        : 'border-slate-800'
+                    }`}
+                  >
                     <div className="text-xs font-mono text-purple-400 font-semibold">
                       Narrative Conflict &amp; Psychological Arc
                     </div>
