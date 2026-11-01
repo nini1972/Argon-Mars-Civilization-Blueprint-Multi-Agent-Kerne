@@ -301,6 +301,7 @@ export const SETTLEMENT_SITES: SettlementSite[] = [
 
 interface D3MarsMapProps {
   onSelectSite?: (site: SettlementSite) => void;
+  onOpenIntegratedTwin?: (site: SettlementSite) => void;
   showMaglev?: boolean;
   showStorms?: boolean;
   showMagnetic?: boolean;
@@ -308,6 +309,7 @@ interface D3MarsMapProps {
 
 export const D3MarsMap: React.FC<D3MarsMapProps> = ({
   onSelectSite,
+  onOpenIntegratedTwin,
   showMaglev = true,
   showStorms = true,
   showMagnetic = true,
@@ -1184,6 +1186,15 @@ export const D3MarsMap: React.FC<D3MarsMapProps> = ({
                   <Compass className="w-3 h-3 text-amber-400" />
                   <span>Center Globe</span>
                 </button>
+                {onOpenIntegratedTwin && (
+                  <button
+                    onClick={() => onOpenIntegratedTwin(activePopupSite)}
+                    className="px-2.5 py-1 text-[10px] rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition-colors flex items-center gap-1"
+                  >
+                    <span>Command Twin</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -3,10 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ATLAS_PLATES } from '../data/atlasPlatesData';
-import { AtlasPlate } from '../types/blueprint';
-import { D3MarsMap } from './D3MarsMap';
+import {
+  AtlasPlate,
+  CivilizationLens,
+  DashboardTab,
+  HomeostaticTensor,
+  SettlementId,
+} from '../types/blueprint';
+import { D3MarsMap, SettlementSite } from './D3MarsMap';
 import {
   Map,
   Layers,
@@ -39,8 +45,31 @@ interface TooltipData {
   description: string;
 }
 
-export const AtlasTab: React.FC = () => {
-  const [selectedPlateId, setSelectedPlateId] = useState<string>('plate-1');
+interface AtlasTabProps {
+  selectedPlateId?: string;
+  setSelectedPlateId?: (id: string) => void;
+  activeLens?: CivilizationLens;
+  activeSettlementId?: SettlementId;
+  setActiveSettlementId?: (id: SettlementId) => void;
+  opticalDepthTau?: number;
+  humanTensor?: HomeostaticTensor;
+  onNavigateTab?: (tab: DashboardTab) => void;
+}
+
+export const AtlasTab: React.FC<AtlasTabProps> = ({
+  selectedPlateId: propPlateId,
+  setSelectedPlateId: propSetPlateId,
+  activeLens = 'ALL',
+  activeSettlementId = 'arcadia-prime',
+  setActiveSettlementId,
+  opticalDepthTau = 0.45,
+  humanTensor,
+  onNavigateTab,
+}) => {
+  const [localPlateId, setLocalPlateId] = useState<string>('plate-1');
+  const selectedPlateId = propPlateId !== undefined ? propPlateId : localPlateId;
+  const setSelectedPlateId = propSetPlateId || setLocalPlateId;
+
   const [plate1Mode, setPlate1Mode] = useState<'d3-interactive' | 'cad-schematic'>('d3-interactive');
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -53,6 +82,36 @@ export const AtlasTab: React.FC = () => {
   const [showRadiationShields, setShowRadiationShields] = useState<boolean>(true);
   const [showAirflowGrid, setShowAirflowGrid] = useState<boolean>(true);
   const [showSafetyHalo, setShowSafetyHalo] = useState<boolean>(true);
+
+  // Sync Atlas Layer Toggles to Active Civilization Lens
+  useEffect(() => {
+    if (activeLens === 'GEOGRAPHY') {
+      setShowMagneticAnomalies(true);
+      setShowStressVectors(true);
+    } else if (activeLens === 'INFRASTRUCTURE') {
+      setShowMaglevLine(true);
+      setShowAirflowGrid(true);
+    } else if (activeLens === 'RESILIENCE') {
+      setShowStormTracks(true);
+      setShowRadiationShields(true);
+      setShowSafetyHalo(true);
+    }
+  }, [activeLens]);
+
+  const handleSelectSettlementSite = (site: SettlementSite) => {
+    if (setActiveSettlementId) {
+      setActiveSettlementId(site.id as SettlementId);
+    }
+  };
+
+  const handleOpenTwin = (site: SettlementSite) => {
+    if (setActiveSettlementId) {
+      setActiveSettlementId(site.id as SettlementId);
+    }
+    if (onNavigateTab) {
+      onNavigateTab('arcadia');
+    }
+  };
 
   const currentPlate = ATLAS_PLATES.find((p) => p.id === selectedPlateId) || ATLAS_PLATES[0];
 
@@ -263,6 +322,8 @@ export const AtlasTab: React.FC = () => {
         {selectedPlateId === 'plate-1' && plate1Mode === 'd3-interactive' ? (
           <div className="p-6 bg-[#030508]">
             <D3MarsMap
+              onSelectSite={handleSelectSettlementSite}
+              onOpenIntegratedTwin={handleOpenTwin}
               showMaglev={showMaglevLine}
               showStorms={showStormTracks}
               showMagnetic={showMagneticAnomalies}

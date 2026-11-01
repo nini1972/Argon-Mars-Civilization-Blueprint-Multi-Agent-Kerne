@@ -11,6 +11,36 @@ export type AutonomyLevel =
   | 'AL4_ACUTE_EMERGENCY'
   | 'AL5_LIZARD_BRAIN';
 
+export type CivilizationLens =
+  | 'ALL'
+  | 'GEOGRAPHY'
+  | 'INFRASTRUCTURE'
+  | 'PSYCHOLOGY'
+  | 'CULTURE'
+  | 'NARRATIVE'
+  | 'RESILIENCE';
+
+export type SettlementId =
+  | 'arcadia-prime'
+  | 'valles-beta'
+  | 'utopia-gamma'
+  | 'jezero'
+  | 'hellas-foundry';
+
+export type DashboardTab =
+  | 'overview'
+  | 'arcadia'
+  | 'atlas'
+  | 'kernel'
+  | 'planetary'
+  | 'emotional'
+  | 'cinematic';
+
+export type SanctuaryMode =
+  | 'ACTIVE_COHORT_SYNC'
+  | 'DIFFERENTIAL_ONLY'
+  | 'SANCTUARY_BLACKOUT';
+
 export type AgentId =
   | 'AGT-TKA' // Technical Kernel Architect
   | 'AGT-PSS' // Planetary Simulation Scientist
@@ -131,4 +161,18 @@ export interface AtlasPlate {
   keyAxioms: string[];
 }
 
-
+export interface CivilizationSnapshot {
+  label: string;
+  sol: number;
+  opticalDepthTau: number;
+  speProtonFlux: number;
+  hullPressurePa: number;
+  o2PartialPressurePa: number;
+  co2PartialPressurePa: number;
+  reactorCoreTempK: number;
+  chpShuntKw: number;
+  pipeFlowRateLpm: number;
+  humanTensor: HomeostaticTensor;
+  contestablePowerKw: number;
+  waterLitersPerSol: number;
+}

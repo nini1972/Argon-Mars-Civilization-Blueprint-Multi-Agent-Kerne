@@ -4,8 +4,14 @@
  */
 
 import React, { useState } from 'react';
-import { SPECIALIST_AGENTS } from '../data/blueprintData';
-import { AgentId, AutonomyLevel, ResourceState } from '../types/blueprint';
+import {
+  AutonomyLevel,
+  CivilizationLens,
+  DashboardTab,
+  HomeostaticTensor,
+  SettlementId,
+} from '../types/blueprint';
+import { SETTLEMENT_SITES } from './D3MarsMap';
 import {
   ShieldAlert,
   Cpu,
@@ -13,12 +19,14 @@ import {
   Droplets,
   Wind,
   Zap,
-  Activity,
   AlertTriangle,
   RotateCcw,
   CheckCircle,
   Database,
   Radio,
+  Brain,
+  ArrowUpRight,
+  FileCode2,
 } from 'lucide-react';
 
 interface KernelConsoleProps {
@@ -26,8 +34,11 @@ interface KernelConsoleProps {
   millisol: number;
   actTick: number;
   autonomyLevel: AutonomyLevel;
+  activeLens?: CivilizationLens;
+  activeSettlementId?: SettlementId;
   opticalDepthTau: number;
   setOpticalDepthTau: (tau: number) => void;
+  solarZenithDeg?: number;
   speProtonFlux: number;
   setSpeProtonFlux: (spe: number) => void;
   hullPressurePa: number;
@@ -38,6 +49,11 @@ interface KernelConsoleProps {
   setCo2PartialPressurePa: (p: number) => void;
   reactorCoreTempK: number;
   setReactorCoreTempK: (t: number) => void;
+  chpShuntKw?: number;
+  pipeFlowRateLpm?: number;
+  humanTensor?: HomeostaticTensor;
+  setHumanTensor?: React.Dispatch<React.SetStateAction<HomeostaticTensor>>;
+  onNavigateTab?: (tab: DashboardTab) => void;
   onResetNominal: () => void;
 }
 
@@ -46,8 +62,11 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
   millisol,
   actTick,
   autonomyLevel,
+  activeLens = 'ALL',
+  activeSettlementId = 'arcadia-prime',
   opticalDepthTau,
   setOpticalDepthTau,
+  solarZenithDeg = 35,
   speProtonFlux,
   setSpeProtonFlux,
   hullPressurePa,
@@ -58,6 +77,11 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
   setCo2PartialPressurePa,
   reactorCoreTempK,
   setReactorCoreTempK,
+  chpShuntKw = 320,
+  pipeFlowRateLpm = 18,
+  humanTensor,
+  setHumanTensor,
+  onNavigateTab,
   onResetNominal,
 }) => {
   // TMR Memory Bank Simulation State
@@ -70,7 +94,27 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
   // Swarm Robotics Voxel Grid simulation
   const [activeRoverIdx, setActiveRoverIdx] = useState<number>(0);
 
-  // Compute Epistemic Weights based on active hazards
+  const currentSettlement =
+    SETTLEMENT_SITES.find((s) => s.id === activeSettlementId) || SETTLEMENT_SITES[0];
+
+  // Coupled Planetary Physics -> Kernel Power Supply
+  const cosZenith = Math.max(0.01, Math.cos((solarZenithDeg * Math.PI) / 180));
+  const toaFlux = 589.2;
+  const directFlux = toaFlux * cosZenith * Math.exp(-opticalDepthTau / cosZenith);
+  const diffuseRatio = 0.58 * (1 - Math.exp(-0.65 * opticalDepthTau));
+  const diffuseFlux = (toaFlux * cosZenith - directFlux) * diffuseRatio;
+  const totalSurfaceFlux = Math.max(0, directFlux + diffuseFlux);
+  const pvYieldWattsPerM2 = totalSurfaceFlux * 0.28;
+  const pvArrayOutputKw = Math.round(pvYieldWattsPerM2 * 3.2);
+  const fissionBaseKw = reactorCoreTempK > 1100 ? 320 : 580;
+
+  // Coupled Emotional Twin Telemetry -> Kernel Constraint Injection
+  const allostaticLoad = humanTensor ? humanTensor.allostaticLoad : 0.35;
+  const cognitiveFatigue = humanTensor ? humanTensor.cognitiveFatigue : 0.28;
+  const isAllostaticPreemption = allostaticLoad >= 0.72;
+  const isCognitiveThrottle = cognitiveFatigue >= 0.65;
+
+  // Compute Epistemic Weights based on active hazards & Emotional Twin Preemption
   const isSpeEmergency = speProtonFlux >= 10;
   const isDustStorm = opticalDepthTau >= 3.5;
 
@@ -80,19 +124,27 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
   let wCud = 0.10;
 
   if (isSpeEmergency) {
-    wTka = 0.55;
-    wPss = 0.30;
-    wEma = 0.15;
+    wTka = 0.52;
+    wPss = 0.28;
+    wEma = isAllostaticPreemption ? 0.20 : 0.15;
     wCud = 0.00;
   } else if (isDustStorm) {
-    wTka = 0.50;
-    wPss = 0.35;
-    wEma = 0.15;
+    wTka = 0.45;
+    wPss = 0.30;
+    wEma = isAllostaticPreemption ? 0.25 : 0.18;
     wCud = 0.00;
+  } else if (isAllostaticPreemption) {
+    // Emotional Twin Preemption Active!
+    wTka = 0.25;
+    wPss = 0.18;
+    wEma = 0.47;
+    wCud = 0.10;
   }
 
+  const weightSum = wTka + wPss + wEma + wCud;
+
   // VCG Bidding state
-  const totalPowerSupply = isDustStorm ? 420 : 980; // kW
+  const totalPowerSupply = fissionBaseKw + pvArrayOutputKw; // Coupled to Planetary Lab!
   const ethPowerFloor = 350; // CONST-ETH floor
   const contestablePower = Math.max(0, totalPowerSupply - ethPowerFloor);
 
@@ -100,30 +152,36 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
     {
       agent: 'AGT-TKA',
       task: 'Electrolysis & Sabatier Sintering',
+      blueprintClause: 'REF:[ISRU-Industrial]',
       minKW: 180,
       optKW: 400,
-      allocatedKW: Math.round(contestablePower * (wTka / (wTka + wPss + wEma + wCud))),
+      allocatedKW: Math.round(contestablePower * (wTka / weightSum)),
     },
     {
       agent: 'AGT-PSS',
-      task: 'Rodwell Cryo-Melt Heat Pump',
+      task: `Rodwell Cryo-Melt (${chpShuntKw} kW_th Shunt)`,
+      blueprintClause: 'REF:[Cryosphere-Hydrology]',
       minKW: 60,
       optKW: 160,
-      allocatedKW: Math.round(contestablePower * (wPss / (wTka + wPss + wEma + wCud))),
+      allocatedKW: Math.round(contestablePower * (wPss / weightSum)),
     },
     {
       agent: 'AGT-EMA',
-      task: 'Circadian Phototherapy & Biophilia',
+      task: isAllostaticPreemption
+        ? 'PREEMPTION: 6500K Phototherapy & Biophilia Surge'
+        : 'Circadian Phototherapy & Biophilia',
+      blueprintClause: 'CONST-ETH Art. III',
       minKW: 40,
       optKW: 120,
-      allocatedKW: Math.round(contestablePower * (wEma / (wTka + wPss + wEma + wCud))),
+      allocatedKW: Math.round(contestablePower * (wEma / weightSum)),
     },
     {
       agent: 'AGT-CUD',
       task: 'Diegetic Atmospheric Projections',
+      blueprintClause: 'REF:[Visual-Semiotics]',
       minKW: 0,
       optKW: 45,
-      allocatedKW: Math.round(contestablePower * (wCud / (wTka + wPss + wEma + wCud))),
+      allocatedKW: Math.round(contestablePower * (wCud / weightSum)),
     },
   ];
 
@@ -141,7 +199,7 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
     setTmrStatusMessage('SEU Detected in Bank A! Hardware TMR 2-of-3 voting scrubber active.');
     setSeuCount((prev) => prev + 1);
 
-    // Auto scrub after 1.5s
+    // Auto scrub after 1.2s
     setTimeout(() => {
       setBankA([...bankB]);
       setTmrStatusMessage('Bank A scrubbed & corrected via Bank B & C majority vote (0 bit error rate).');
@@ -158,17 +216,26 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
             <span>·</span>
             <span>SECTION [Kernel-Architecture]</span>
             <span>·</span>
-            <span>TIER-0 TMR LOCKSTEP</span>
+            <span>NODE: {currentSettlement.code} ({currentSettlement.name.toUpperCase()})</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
             Deterministic Multi-Agent Mars Kernel
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-3xl">
-            Operating on 10ms Areocentric Control Ticks (ACT) under radiation-hardened Q32.32 fixed-point determinism. Enforces Constrained VCG auctions and Control Barrier Function (CBF) safety envelopes.
+            Operating on 10ms Areocentric Control Ticks (ACT) under radiation-hardened Q32.32 fixed-point determinism. Dynamically coupled to Planetary Lab radiative flux and Emotional Twin allostatic preemption.
           </p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('arcadia')}
+              className="px-3 py-1.5 text-xs font-mono text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 rounded-md transition-colors flex items-center gap-1.5"
+            >
+              <span>{currentSettlement.name} Twin</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={onResetNominal}
             className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md transition-colors flex items-center gap-1.5"
@@ -201,8 +268,9 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
             </span>
             <span className="text-xs font-mono text-slate-400">kPa</span>
           </div>
-          <div className="mt-2 text-xs font-mono text-slate-500">
-            Bounds: 16.0 – 23.5 kPa (CONST-ETH)
+          <div className="mt-2 text-xs font-mono text-slate-500 flex items-center justify-between">
+            <span>Bounds: 16.0 – 23.5 kPa</span>
+            <span className="text-emerald-400 text-[10px]">[CONST-ETH]</span>
           </div>
         </div>
 
@@ -226,8 +294,9 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
             </span>
             <span className="text-xs font-mono text-slate-400">Pa</span>
           </div>
-          <div className="mt-2 text-xs font-mono text-slate-500">
-            Ceiling: 500 Pa (Cognitive preservation)
+          <div className="mt-2 text-xs font-mono text-slate-500 flex items-center justify-between">
+            <span>Ceiling: 500 Pa</span>
+            <span className="text-purple-400 text-[10px]">→ Twin κ_cog</span>
           </div>
         </div>
 
@@ -285,15 +354,21 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
       {/* Main Grid: VCG Negotiation & Disaster Injection */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Constrained VCG Negotiation Engine */}
-        <div className="lg:col-span-2 p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-6">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div
+          className={`lg:col-span-2 p-6 bg-slate-900/60 rounded-xl border space-y-6 transition-all ${
+            activeLens === 'INFRASTRUCTURE' || activeLens === 'PSYCHOLOGY'
+              ? 'border-amber-500/70 ring-1 ring-amber-500/20'
+              : 'border-slate-800'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-slate-800">
             <div>
               <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-500" />
-                <span>Constrained VCG Multi-Commodity Auction</span>
+                <span>Constrained VCG Multi-Commodity Auction (Coupled Bus)</span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Dynamic epistemic reweighting based on planetary telemetry · Solves every 1 mSol
+                Fission ({fissionBaseKw} kW) + Planetary Lab PV ({pvArrayOutputKw} kW at τ={opticalDepthTau.toFixed(2)}) · Emotional Twin σ_allost={(allostaticLoad * 100).toFixed(0)}%
               </p>
             </div>
             <div className="text-right">
@@ -309,22 +384,38 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
           <div className="grid grid-cols-4 gap-3 text-center">
             <div className="p-3 bg-slate-950/60 rounded border border-slate-800">
               <div className="text-xs text-slate-400 font-mono">w_TKA (Tech)</div>
-              <div className="text-lg font-bold font-mono text-slate-100 mt-1">{(wTka * 100).toFixed(0)}%</div>
+              <div className="text-lg font-bold font-mono text-slate-100 mt-1">
+                {((wTka / weightSum) * 100).toFixed(0)}%
+              </div>
               <div className="text-[10px] text-slate-500 mt-0.5">Physical bus owner</div>
             </div>
             <div className="p-3 bg-slate-950/60 rounded border border-slate-800">
               <div className="text-xs text-slate-400 font-mono">w_PSS (Planetary)</div>
-              <div className="text-lg font-bold font-mono text-slate-100 mt-1">{(wPss * 100).toFixed(0)}%</div>
+              <div className="text-lg font-bold font-mono text-cyan-400 mt-1">
+                {((wPss / weightSum) * 100).toFixed(0)}%
+              </div>
               <div className="text-[10px] text-slate-500 mt-0.5">Hazard envelopes</div>
             </div>
-            <div className="p-3 bg-slate-950/60 rounded border border-slate-800">
-              <div className="text-xs text-slate-400 font-mono">w_EMA (Emotional)</div>
-              <div className="text-lg font-bold font-mono text-slate-100 mt-1">{(wEma * 100).toFixed(0)}%</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Allostatic defense</div>
+            <div
+              className={`p-3 rounded border ${
+                isAllostaticPreemption
+                  ? 'bg-purple-950/50 border-purple-500 text-purple-200'
+                  : 'bg-slate-950/60 border-slate-800'
+              }`}
+            >
+              <div className="text-xs text-purple-300 font-mono">w_EMA (Emotional)</div>
+              <div className="text-lg font-bold font-mono text-purple-300 mt-1">
+                {((wEma / weightSum) * 100).toFixed(0)}%
+              </div>
+              <div className="text-[10px] text-purple-400 mt-0.5">
+                {isAllostaticPreemption ? 'PREEMPTION ACTIVE' : 'Allostatic defense'}
+              </div>
             </div>
             <div className="p-3 bg-slate-950/60 rounded border border-slate-800">
               <div className="text-xs text-slate-400 font-mono">w_CUD (Diegetic)</div>
-              <div className="text-lg font-bold font-mono text-slate-100 mt-1">{(wCud * 100).toFixed(0)}%</div>
+              <div className="text-lg font-bold font-mono text-slate-100 mt-1">
+                {((wCud / weightSum) * 100).toFixed(0)}%
+              </div>
               <div className="text-[10px] text-slate-500 mt-0.5">Shed during storms</div>
             </div>
           </div>
@@ -336,9 +427,10 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
                 <tr className="border-b border-slate-800 text-slate-400 font-mono">
                   <th className="pb-2.5">Agent Daemon</th>
                   <th className="pb-2.5">Subsystem Allocation Task</th>
+                  <th className="pb-2.5">Blueprint Guardrail</th>
                   <th className="pb-2.5 text-right">Min Viable</th>
-                  <th className="pb-2.5 text-right">Optimal Desired</th>
-                  <th className="pb-2.5 text-right">GMA Pareto Grant</th>
+                  <th className="pb-2.5 text-right">Optimal</th>
+                  <th className="pb-2.5 text-right">GMA Grant</th>
                   <th className="pb-2.5 text-right">Status</th>
                 </tr>
               </thead>
@@ -350,6 +442,11 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
                     <tr key={b.agent} className="hover:bg-slate-800/30 transition-colors">
                       <td className="py-2.5 font-semibold text-slate-200">{b.agent}</td>
                       <td className="py-2.5 text-slate-300 font-sans">{b.task}</td>
+                      <td className="py-2.5">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] text-amber-400">
+                          {b.blueprintClause}
+                        </span>
+                      </td>
                       <td className="py-2.5 text-right text-slate-400">{b.minKW} kW</td>
                       <td className="py-2.5 text-right text-slate-400">{b.optKW} kW</td>
                       <td className="py-2.5 text-right font-bold text-amber-400">{b.allocatedKW} kW</td>
@@ -381,14 +478,20 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
         </div>
 
         {/* Right Col: Adversarial Hazard Injection & Recovery */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-5">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-5 transition-all ${
+            activeLens === 'RESILIENCE'
+              ? 'border-rose-500/70 ring-1 ring-rose-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div>
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-500" />
               <span>Adversarial Stress Testing</span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Inject real physical anomalies to observe kernel state transitions
+              Inject real physical or psychological anomalies to observe cross-module transitions
             </p>
           </div>
 
@@ -405,7 +508,9 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
               <div>
                 <div className="text-xs font-semibold">Global Dust Storm (GDS)</div>
                 <div className="text-[11px] text-slate-400">
-                  {isDustStorm ? 'Active: τ = 4.2 (PV dropped 62%)' : 'Nominal: τ = 0.45'}
+                  {isDustStorm
+                    ? `Active: τ = ${opticalDepthTau.toFixed(2)} (PV = ${pvArrayOutputKw} kW)`
+                    : `Nominal: τ = ${opticalDepthTau.toFixed(2)}`}
                 </div>
               </div>
               <Wind className="w-4 h-4 text-amber-400" />
@@ -464,6 +569,34 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
               </div>
               <Flame className="w-4 h-4 text-rose-400" />
             </button>
+
+            {/* Emotional Twin Allostatic Preemption Trigger */}
+            {setHumanTensor && (
+              <button
+                onClick={() =>
+                  setHumanTensor((prev) => ({
+                    ...prev,
+                    allostaticLoad: isAllostaticPreemption ? 0.35 : 0.82,
+                    cognitiveFatigue: isAllostaticPreemption ? 0.28 : 0.74,
+                  }))
+                }
+                className={`w-full p-3 rounded-lg border text-left transition-all flex items-center justify-between ${
+                  isAllostaticPreemption
+                    ? 'bg-purple-950/40 border-purple-500 text-purple-200'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                }`}
+              >
+                <div>
+                  <div className="text-xs font-semibold">Cohort Allostatic Overload (&gt;72%)</div>
+                  <div className="text-[11px] text-slate-400">
+                    {isAllostaticPreemption
+                      ? 'Active: AGT-EMA preempting sintering bus'
+                      : 'Nominal: σ_allost = 35%'}
+                  </div>
+                </div>
+                <Brain className="w-4 h-4 text-purple-400" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -476,7 +609,7 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
             <div>
               <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
                 <Database className="w-4 h-4 text-amber-500" />
-                <span>TMR MRAM Bit-Scrubber & SEU Defense</span>
+                <span>TMR MRAM Bit-Scrubber &amp; SEU Defense</span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 2-of-3 bitwise majority voting against cosmic ray Single-Event Upsets
@@ -534,7 +667,9 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
                 Collision-free time-expanded reservation grid · 15m human EVA exclusion halo
               </p>
             </div>
-            <span className="text-xs font-mono text-emerald-400">32 Units Online</span>
+            <span className="text-xs font-mono text-emerald-400">
+              {currentSettlement.activeSwarmRovers} Units Online ({currentSettlement.code})
+            </span>
           </div>
 
           {/* Simple Interactive Voxel Arena Representation */}
@@ -561,7 +696,12 @@ export const KernelConsole: React.FC<KernelConsoleProps> = ({
           </div>
 
           <div className="text-xs text-slate-400 flex items-center justify-between">
-            <span>Selected Unit: <strong className="text-slate-200">Rover #{activeRoverIdx + 1}</strong> (Microwave Sinterer)</span>
+            <span>
+              Selected Unit: <strong className="text-slate-200">Rover #{activeRoverIdx + 1}</strong>{' '}
+              {isCognitiveThrottle
+                ? '(Auto-Taking Over Human EVA Tasks due to κ_cog > 65%)'
+                : '(Microwave Sinterer)'}
+            </span>
             <span className="text-slate-500">Speed: 4.2 km/h in 0.376g</span>
           </div>
         </div>

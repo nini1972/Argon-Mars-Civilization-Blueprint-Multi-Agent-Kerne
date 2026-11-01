@@ -10,25 +10,62 @@ import {
   CANON_CHARACTERS,
   AREAN_CREOLE_GLOSSARY,
 } from '../data/blueprintData';
-import { FilmCanonEntry, SeriesCanonEntry, CharacterProfile } from '../types/blueprint';
+import {
+  CivilizationLens,
+  DashboardTab,
+  FilmCanonEntry,
+  HomeostaticTensor,
+  SettlementId,
+} from '../types/blueprint';
 import { audioSynth } from '../utils/audioSynth';
 import {
   Film,
   Tv,
   Users,
   BookOpen,
-  Volume2,
-  VolumeX,
   Play,
   Pause,
   Camera,
   Palette,
   Music,
-  ExternalLink,
-  ChevronRight,
+  Clock,
+  MapPin,
+  Brain,
+  ArrowUpRight,
 } from 'lucide-react';
 
-export const CinematicUniverseExplorer: React.FC = () => {
+interface CinematicUniverseExplorerProps {
+  activeLens?: CivilizationLens;
+  sol?: number;
+  setSol?: (sol: number) => void;
+  setActiveSettlementId?: (id: SettlementId) => void;
+  setHumanTensor?: React.Dispatch<React.SetStateAction<HomeostaticTensor>>;
+  onNavigateTab?: (tab: DashboardTab) => void;
+}
+
+const FILM_SPATIAL_SOL_MAP: Record<string, { sol: number; settlement: SettlementId; settlementLabel: string }> = {
+  'F-01': { sol: 90, settlement: 'arcadia-prime', settlementLabel: 'Arcadia Prime (ARC-01)' },
+  'F-02': { sol: 650, settlement: 'arcadia-prime', settlementLabel: 'Arcadia Lava Tubes (ARC-01)' },
+  'F-03': { sol: 1320, settlement: 'arcadia-prime', settlementLabel: 'Arcadia Prime (ARC-01)' },
+  'F-04': { sol: 3950, settlement: 'arcadia-prime', settlementLabel: 'Arcadia Wellhead Alpha (ARC-01)' },
+  'F-05': { sol: 5300, settlement: 'arcadia-prime', settlementLabel: 'Arcadia Biosphere (ARC-01)' },
+  'F-06': { sol: 6900, settlement: 'jezero', settlementLabel: 'Jezero Synod Capitol (JEZ-04)' },
+  'F-07': { sol: 8000, settlement: 'jezero', settlementLabel: 'Jezero 12-Ha Dome (JEZ-04)' },
+  'F-08': { sol: 9460, settlement: 'jezero', settlementLabel: 'Jezero Relay & Grid (JEZ-04)' },
+  'F-09': { sol: 10700, settlement: 'arcadia-prime', settlementLabel: 'Arcadia Ag-Sector (ARC-01)' },
+  'F-10': { sol: 12600, settlement: 'valles-beta', settlementLabel: 'Valles Beta Maglev Hub (VAL-02)' },
+  'F-11': { sol: 14400, settlement: 'hellas-foundry', settlementLabel: 'Hellas & Jezero Synod (HEL-05)' },
+  'F-12': { sol: 18000, settlement: 'utopia-gamma', settlementLabel: 'Utopia Gamma Reserve (UTO-03)' },
+};
+
+export const CinematicUniverseExplorer: React.FC<CinematicUniverseExplorerProps> = ({
+  activeLens = 'ALL',
+  sol = 142,
+  setSol,
+  setActiveSettlementId,
+  setHumanTensor,
+  onNavigateTab,
+}) => {
   const [activeTab, setActiveTab] = useState<'films' | 'series' | 'characters' | 'glossary'>('films');
   const [selectedEpoch, setSelectedEpoch] = useState<string>('all');
   const [selectedFilm, setSelectedFilm] = useState<FilmCanonEntry | null>(CANON_FILMS[0]);
@@ -58,6 +95,24 @@ export const CinematicUniverseExplorer: React.FC = () => {
     }
   };
 
+  const handleSyncFilmContext = (film: FilmCanonEntry) => {
+    const mapping = FILM_SPATIAL_SOL_MAP[film.id];
+    if (mapping) {
+      if (setSol) setSol(mapping.sol);
+      if (setActiveSettlementId) setActiveSettlementId(mapping.settlement);
+      if (onNavigateTab) onNavigateTab('arcadia');
+    }
+  };
+
+  const handleLoadCharacterTensor = (tensor: HomeostaticTensor) => {
+    if (setHumanTensor) {
+      setHumanTensor({ ...tensor });
+    }
+    if (onNavigateTab) {
+      onNavigateTab('emotional');
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -74,7 +129,7 @@ export const CinematicUniverseExplorer: React.FC = () => {
             Cinematic Universe &amp; Diegetic Bible
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-3xl">
-            A 50-year narrative tapestry of 12 canonical feature films and 3 prestige long-form series, capturing the visceral sensory, physiological, and linguistic evolution of Martian civilization.
+            A 50-year narrative tapestry of 12 canonical feature films and 3 prestige long-form series, spatially and temporally pinned to the Atlas, Execution Spine, and Emotional Twins.
           </p>
         </div>
 
@@ -193,6 +248,7 @@ export const CinematicUniverseExplorer: React.FC = () => {
             <div className="lg:col-span-1 space-y-3">
               {filteredFilms.map((film) => {
                 const isSelected = selectedFilm?.id === film.id;
+                const pin = FILM_SPATIAL_SOL_MAP[film.id];
                 return (
                   <button
                     key={film.id}
@@ -209,8 +265,9 @@ export const CinematicUniverseExplorer: React.FC = () => {
                     </div>
                     <h3 className="text-sm font-bold text-slate-100">{film.title}</h3>
                     <p className="text-xs text-slate-400 line-clamp-2 mt-1">{film.logline}</p>
-                    <div className="mt-2 text-[10px] text-slate-500 font-mono">
-                      {film.epoch}
+                    <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                      <span>{film.epoch}</span>
+                      {pin && <span className="text-cyan-400">{pin.settlementLabel.split(' (')[0]}</span>}
                     </div>
                   </button>
                 );
@@ -243,6 +300,30 @@ export const CinematicUniverseExplorer: React.FC = () => {
                         {selectedFilm.solsTimeline}
                       </span>
                     </div>
+                  </div>
+                )}
+
+                {/* Spatial & Temporal Pinning Action Bar */}
+                {FILM_SPATIAL_SOL_MAP[selectedFilm.id] && (
+                  <div className="p-3.5 bg-slate-950 rounded-xl border border-amber-500/40 flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-amber-400 flex items-center gap-1 font-bold">
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>{FILM_SPATIAL_SOL_MAP[selectedFilm.id].settlementLabel}</span>
+                      </span>
+                      <span className="text-slate-600">·</span>
+                      <span className="text-cyan-400 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Anchor: Sol {FILM_SPATIAL_SOL_MAP[selectedFilm.id].sol}</span>
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleSyncFilmContext(selectedFilm)}
+                      className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      <span>Pin to Global Clock &amp; Settlement Twin</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
 
@@ -397,6 +478,16 @@ export const CinematicUniverseExplorer: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {setHumanTensor && (
+                <button
+                  onClick={() => handleLoadCharacterTensor(char.homeostaticBaseline)}
+                  className="w-full py-2 px-3 rounded-lg bg-purple-950/50 hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 text-xs font-mono flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Brain className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Load {char.name}’s 5D Tensor into Emotional Twin Simulator</span>
+                </button>
+              )}
             </div>
           ))}
         </div>

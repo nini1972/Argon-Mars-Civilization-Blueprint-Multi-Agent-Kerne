@@ -5,30 +5,85 @@
 
 import React, { useState } from 'react';
 import {
+  CivilizationLens,
+  DashboardTab,
+  HomeostaticTensor,
+} from '../types/blueprint';
+import {
   Sun,
   Droplets,
   Radiation,
-  Wind,
-  Layers,
   Zap,
-  TrendingDown,
-  Info,
   CheckCircle,
   AlertTriangle,
+  Brain,
+  Cpu,
+  ArrowUpRight,
+  RotateCcw,
 } from 'lucide-react';
 
-export const PlanetarySimulationLab: React.FC = () => {
-  // Delta-Eddington Simulation Controls
-  const [opticalDepthTau, setOpticalDepthTau] = useState<number>(0.85);
-  const [solarZenithDeg, setSolarZenithDeg] = useState<number>(35);
+interface PlanetarySimulationLabProps {
+  activeLens?: CivilizationLens;
+  opticalDepthTau?: number;
+  setOpticalDepthTau?: (tau: number) => void;
+  solarZenithDeg?: number;
+  setSolarZenithDeg?: (deg: number) => void;
+  chpShuntKw?: number;
+  setChpShuntKw?: (kw: number) => void;
+  pipeFlowRateLpm?: number;
+  setPipeFlowRateLpm?: (lpm: number) => void;
+  shieldingType?: 'dry_basalt' | 'graded_z';
+  setShieldingType?: (t: 'dry_basalt' | 'graded_z') => void;
+  arealDepthGcm2?: number;
+  setArealDepthGcm2?: (d: number) => void;
+  humanTensor?: HomeostaticTensor;
+  onNavigateTab?: (tab: DashboardTab) => void;
+  onResetNominal?: () => void;
+}
 
-  // Rodwell Cryo-Hydrology Controls
-  const [chpShuntKw, setChpShuntKw] = useState<number>(320);
-  const [pipeFlowRateLpm, setPipeFlowRateLpm] = useState<number>(18);
+export const PlanetarySimulationLab: React.FC<PlanetarySimulationLabProps> = ({
+  activeLens = 'ALL',
+  opticalDepthTau: propTau,
+  setOpticalDepthTau: propSetTau,
+  solarZenithDeg: propZenith,
+  setSolarZenithDeg: propSetZenith,
+  chpShuntKw: propChp,
+  setChpShuntKw: propSetChp,
+  pipeFlowRateLpm: propFlow,
+  setPipeFlowRateLpm: propSetFlow,
+  shieldingType: propShielding,
+  setShieldingType: propSetShielding,
+  arealDepthGcm2: propDepth,
+  setArealDepthGcm2: propSetDepth,
+  humanTensor,
+  onNavigateTab,
+  onResetNominal,
+}) => {
+  // Fallback local state if used standalone
+  const [localTau, setLocalTau] = useState<number>(0.85);
+  const [localZenith, setLocalZenith] = useState<number>(35);
+  const [localChp, setLocalChp] = useState<number>(320);
+  const [localFlow, setLocalFlow] = useState<number>(18);
+  const [localShielding, setLocalShielding] = useState<'dry_basalt' | 'graded_z'>('graded_z');
+  const [localDepth, setLocalDepth] = useState<number>(180);
 
-  // Radiation Shielding Controls
-  const [shieldingType, setShieldingType] = useState<'dry_basalt' | 'graded_z'>('graded_z');
-  const [arealDepthGcm2, setArealDepthGcm2] = useState<number>(180);
+  const opticalDepthTau = propTau !== undefined ? propTau : localTau;
+  const setOpticalDepthTau = propSetTau || setLocalTau;
+
+  const solarZenithDeg = propZenith !== undefined ? propZenith : localZenith;
+  const setSolarZenithDeg = propSetZenith || setLocalZenith;
+
+  const chpShuntKw = propChp !== undefined ? propChp : localChp;
+  const setChpShuntKw = propSetChp || setLocalChp;
+
+  const pipeFlowRateLpm = propFlow !== undefined ? propFlow : localFlow;
+  const setPipeFlowRateLpm = propSetFlow || setLocalFlow;
+
+  const shieldingType = propShielding !== undefined ? propShielding : localShielding;
+  const setShieldingType = propSetShielding || setLocalShielding;
+
+  const arealDepthGcm2 = propDepth !== undefined ? propDepth : localDepth;
+  const setArealDepthGcm2 = propSetDepth || setLocalDepth;
 
   // Delta-Eddington calculations
   const cosZenith = Math.max(0.01, Math.cos((solarZenithDeg * Math.PI) / 180));
@@ -41,7 +96,6 @@ export const PlanetarySimulationLab: React.FC = () => {
   const pvYieldWattsPerM2 = totalSurfaceFlux * pvEfficiency;
 
   // Rodwell Stefan Cavity calculations
-  // Energy to melt 195K ice to 280K water ~ 500 kJ/kg
   const conductiveLossKw = 45;
   const netMeltKw = Math.max(0, chpShuntKw - conductiveLossKw);
   const meltRateKgPerHour = (netMeltKw * 3600) / 499; // kg/hour
@@ -64,6 +118,14 @@ export const PlanetarySimulationLab: React.FC = () => {
     effectiveDoseMsvYear = 240 * Math.exp(-arealDepthGcm2 / 55);
   }
 
+  // Downstream Causal Projections for Kernel & Emotional Twins
+  const projectedPvContributionKw = Math.round(pvYieldWattsPerM2 * 3.2);
+  const projectedCircadianDriftImpact = Math.min(100, Math.round(14 + opticalDepthTau * 12));
+  const projectedConfinementStressImpact = Math.min(
+    100,
+    Math.round(28 + opticalDepthTau * 10 + (effectiveDoseMsvYear > 50 ? 22 : 0))
+  );
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -74,21 +136,103 @@ export const PlanetarySimulationLab: React.FC = () => {
             <span>·</span>
             <span>SECTION [Planetary-Simulation]</span>
             <span>·</span>
-            <span>PARATERRAFORMING & CLIMATE</span>
+            <span>UNIFIED STATE BUS COUPLED</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-100 tracking-tight">
             Planetary Simulation &amp; Paraterraforming Lab
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-3xl">
-            Coupled physical models spanning Delta-Eddington dust radiative transfer, moving-boundary Rodwell cryo-hydrology, and HZETRN Boltzmann secondary neutron shielding paradoxes.
+            Coupled physical models spanning Delta-Eddington dust radiative transfer, moving-boundary Rodwell cryo-hydrology, and HZETRN Boltzmann secondary neutron shielding paradoxes. All sliders propagate live to the Kernel and Emotional Twins.
           </p>
+        </div>
+
+        {onResetNominal && (
+          <button
+            onClick={onResetNominal}
+            className="px-3 py-1.5 text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-md flex items-center gap-1.5 self-start md:self-auto transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Reset Planetary Baseline</span>
+          </button>
+        )}
+      </div>
+
+      {/* Live Cross-Module Causal Coupling Banner */}
+      <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-950/15 grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+        <div className="flex items-center justify-between p-3 bg-slate-950/90 rounded-lg border border-slate-800">
+          <div>
+            <div className="text-[10px] text-slate-400 uppercase flex items-center gap-1">
+              <Cpu className="w-3 h-3 text-amber-400" />
+              <span>→ Kernel PV Array Bus</span>
+            </div>
+            <div className="text-base font-bold text-amber-400 mt-0.5 tabular-nums">
+              +{projectedPvContributionKw} kW_e ({pvYieldWattsPerM2.toFixed(1)} W/m²)
+            </div>
+          </div>
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('kernel')}
+              className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-400 border border-slate-700"
+              title="Inspect in Multi-Agent Kernel"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between p-3 bg-slate-950/90 rounded-lg border border-slate-800">
+          <div>
+            <div className="text-[10px] text-slate-400 uppercase flex items-center gap-1">
+              <Droplets className="w-3 h-3 text-cyan-400" />
+              <span>→ Kernel H2O Reservoir</span>
+            </div>
+            <div className="text-base font-bold text-cyan-400 mt-0.5 tabular-nums">
+              {meltRateLitersPerSol.toLocaleString()} L/Sol ({isPipeFreezing ? 'FREEZE RISK' : 'Nominal'})
+            </div>
+          </div>
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('arcadia')}
+              className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-slate-700"
+              title="Inspect in Settlement Twin"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between p-3 bg-slate-950/90 rounded-lg border border-slate-800">
+          <div>
+            <div className="text-[10px] text-slate-400 uppercase flex items-center gap-1">
+              <Brain className="w-3 h-3 text-purple-400" />
+              <span>→ Emotional Twin Stress</span>
+            </div>
+            <div className="text-base font-bold text-purple-300 mt-0.5 tabular-nums">
+              ϕ_circ: {humanTensor ? (humanTensor.circadianDesync * 100).toFixed(0) : projectedCircadianDriftImpact}% · σ_allost: {humanTensor ? (humanTensor.allostaticLoad * 100).toFixed(0) : projectedConfinementStressImpact}%
+            </div>
+          </div>
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('emotional')}
+              className="p-1.5 rounded bg-slate-900 hover:bg-slate-800 text-purple-300 border border-slate-700"
+              title="Inspect in Emotional Twins Lab"
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Lab Grid: Delta Eddington & Rodwell Cryo */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Lab 1: Delta-Eddington Radiative Transfer */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-6">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-6 transition-all ${
+            activeLens === 'GEOGRAPHY' || activeLens === 'RESILIENCE'
+              ? 'border-cyan-500/70 ring-1 ring-cyan-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               <Sun className="w-4 h-4 text-amber-500" />
@@ -168,7 +312,13 @@ export const PlanetarySimulationLab: React.FC = () => {
         </div>
 
         {/* Lab 2: Rodwell Cryo-Hydrology Stefan Cavity */}
-        <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-6">
+        <div
+          className={`p-6 bg-slate-900/60 rounded-xl border space-y-6 transition-all ${
+            activeLens === 'INFRASTRUCTURE' || activeLens === 'GEOGRAPHY'
+              ? 'border-cyan-500/70 ring-1 ring-cyan-500/20'
+              : 'border-slate-800'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
               <Droplets className="w-4 h-4 text-cyan-400" />
@@ -256,7 +406,13 @@ export const PlanetarySimulationLab: React.FC = () => {
       </div>
 
       {/* Lab 3: Radiation Exposure & Secondary Neutron Spallation Paradox */}
-      <div className="p-6 bg-slate-900/60 rounded-xl border border-slate-800 space-y-6">
+      <div
+        className={`p-6 bg-slate-900/60 rounded-xl border space-y-6 transition-all ${
+          activeLens === 'RESILIENCE' || activeLens === 'PSYCHOLOGY'
+            ? 'border-rose-500/70 ring-1 ring-rose-500/20'
+            : 'border-slate-800'
+        }`}
+      >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-800">
           <div>
             <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
